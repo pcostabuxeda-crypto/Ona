@@ -9,6 +9,8 @@
   import { player } from "$lib/player.svelte";
   import { settings } from "$lib/settings.svelte";
 
+  let { inset = "40px", dark = false }: { inset?: string; dark?: boolean } = $props();
+
   const LEAD_MS = 250;
   const memo = new Map<string, Lyrics>();
 
@@ -66,10 +68,10 @@
 
 {#if rich && lyrics}
   {#key player.current?.id}
-    <RichLyrics {lyrics} />
+    <RichLyrics {lyrics} {inset} {dark} />
   {/key}
 {:else}
-  <section class="lyrics" style:--bg={player.palette.a} bind:this={box}>
+  <section class="lyrics" class:dark style:--bg={player.palette.a} style:--inset={inset} bind:this={box}>
     {#if !player.current}
       <p class="msg">Posa alguna cançó.</p>
     {:else if lyrics === undefined}
@@ -98,13 +100,19 @@
   .lyrics {
     min-height: 100%;
     box-sizing: border-box;
-    padding: 48px 40px 30vh;
+    padding: 48px 40px 30vh var(--inset);
     background: var(--bg);
     transition: background 0.6s;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
+  }
+  .dark {
+    background: radial-gradient(circle at 30% 40%, color-mix(in srgb, var(--bg) 45%, #000), #0a0a0b 75%);
+  }
+  .dark .line.future {
+    color: rgb(255 255 255 / 0.3);
   }
   .line {
     font-family: var(--font-title);

@@ -18,6 +18,22 @@
   --font-title: SpotifyMixUITitle, SpotifyMixUI, "Helvetica Neue", Helvetica, Arial, "Segoe UI", sans-serif;
   color-scheme: dark;
 }
+/* Estètica tipus Liner (preferència «liner»): negre neutre, panells més rodons, accents blancs. */
+.app.liner {
+  --bg: #050506;
+  --base: #0f0f11;
+  --highlight: #1a1a1d;
+  --elevated: #1a1a1d;
+  --elevated-hi: #242428;
+  --tinted: #ffffff12;
+  --tinted-hi: #ffffff1f;
+  --text-2: #a1a1a8;
+  --accent: #fff;
+  --radius: 14px;
+  --font: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-title: "Inter", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  font-family: var(--font);
+}
 html, body {
   margin: 0;
   height: 100%;

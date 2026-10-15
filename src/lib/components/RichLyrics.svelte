@@ -14,7 +14,8 @@
   import type { Lyrics } from "$lib/api";
   import { player } from "$lib/player.svelte";
 
-  let { lyrics }: { lyrics: NonNullable<Lyrics> } = $props();
+  /** `inset`: marge esquerre per a la columna de la pantalla completa; `dark`: vel més fosc (estètica Liner). */
+  let { lyrics, inset = "40px", dark = false }: { lyrics: NonNullable<Lyrics>; inset?: string; dark?: boolean } = $props();
 
   let canvas: HTMLCanvasElement;
   let view: HTMLElement & { lyrics: Lyric[] | null; currentTime: number; playing: boolean; theme: string; renderer?: { noteUserScroll(): void } | null };
@@ -120,7 +121,7 @@
   });
 </script>
 
-<div class="rich" style:--bg={player.palette.a}>
+<div class="rich" class:dark style:--bg={player.palette.a} style:--inset={inset}>
   <canvas bind:this={canvas}></canvas>
   <braccato-lyrics bind:this={view} onwheel={() => view.renderer?.noteUserScroll()}></braccato-lyrics>
   <p class="src">Lletra: {lyrics.source}{lyrics.ttml ? " · betterlyrics.org" : ""}</p>
@@ -147,19 +148,22 @@
     background: rgb(0 0 0 / 0.3);
     pointer-events: none;
   }
+  .dark::after {
+    background: radial-gradient(circle at 30% 40%, rgb(0 0 0 / 0.35), rgb(0 0 0 / 0.8));
+  }
   braccato-lyrics {
     position: relative;
     z-index: 1;
     display: block;
     height: 100%;
     overflow-y: auto;
-    padding: 0 40px;
+    padding: 0 40px 0 var(--inset);
     scrollbar-width: none;
   }
   .src {
     position: absolute;
     z-index: 1;
-    left: 40px;
+    left: var(--inset);
     bottom: 8px;
     margin: 0;
     font-size: 12px;

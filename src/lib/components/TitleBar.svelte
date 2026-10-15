@@ -2,7 +2,7 @@
   /** Barra de dalt com la del client: enrere/endavant, inici, cercador, perfil i botons de finestra. */
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import Icon from "./Icon.svelte";
-  import { settings, setLight } from "$lib/settings.svelte";
+  import { settings, setSetting } from "$lib/settings.svelte";
   import { ui } from "$lib/ui.svelte";
 
   let { loggedIn, onlogout }: { loggedIn: boolean; onlogout: () => void } = $props();
@@ -17,9 +17,14 @@
         label: settings.light ? "Desactiva el mode lleuger" : "Activa el mode lleuger",
         icon: "settings",
         run: () => {
-          setLight(!settings.light);
+          setSetting("light", !settings.light);
           ui.say(settings.light ? "Mode lleuger: lletra simple i fons pla" : "Mode complet: síl·labes i fons animat");
         },
+      },
+      {
+        label: settings.liner ? "Torna a l'estètica Spotify" : "Activa l'estètica Liner",
+        icon: "npv",
+        run: () => setSetting("liner", !settings.liner),
       },
       { label: ui.free ? "Inicia sessió amb Spotify" : "Tanca la sessió", icon: "logout", run: onlogout },
     ]);

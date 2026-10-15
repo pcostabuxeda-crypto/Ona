@@ -14,6 +14,8 @@
   import Lyrics from "$lib/views/Lyrics.svelte";
   import CollectionView from "$lib/views/CollectionView.svelte";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
+  import NowPlayingFull from "$lib/components/NowPlayingFull.svelte";
+  import { settings } from "$lib/settings.svelte";
 
   let phase = $state<"boot" | "login" | "app">("boot");
   let busy = $state(false);
@@ -121,20 +123,20 @@
 
 <svelte:window onkeydown={onKey} bind:innerWidth={width} />
 
-<div class="app">
+<div class="app" class:liner={settings.liner}>
   <TitleBar loggedIn={phase === "app"} onlogout={doLogout} />
 
   {#if phase === "login"}
     <Login onlogin={doLogin} onfree={enterFree} {busy} {error} />
   {:else if phase === "app"}
     <div class="body" class:narrow>
-      <Sidebar collapsed={width < 900} />
+      <Sidebar collapsed={width < 900 || settings.liner} />
       <main bind:this={scroller}>
         {#if ui.view.name === "home"}
           <Home />
         {:else if ui.view.name === "search"}
           <Search />
-        {:else if ui.view.name === "lyrics"}
+        {:else if ui.view.name === "lyrics" && !settings.liner}
           <Lyrics />
         {:else if ui.view.name === "collection"}
           {#key ui.view}
@@ -149,6 +151,7 @@
       {/if}
     </div>
     <PlayerBar />
+    {#if ui.view.name === "lyrics" && settings.liner}<NowPlayingFull />{/if}
   {/if}
 
   <ContextMenu />

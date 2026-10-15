@@ -8,6 +8,7 @@ Client d'escriptori lleuger per a Spotify Premium (Windows). Poc consum de RAM/C
 
 ## Funcions
 - Lletra per síl·laba ([Better Lyrics](https://better-lyrics.boidu.dev), API gratuïta) pintada amb `@braccato/core`, sobre un fons fluid fet amb la portada (`@kawarp/core`, WebGL). Si no n'hi ha, la de Spotify (per línies) o LRCLIB.
+- **Estètica Liner** (menú del perfil): interfície fosca i neutra, barra d'icones i lletra a pantalla completa amb la portada i els controls a l'esquerra. Inspirada en [Liner](https://github.com/tryliner/desktop), però amb codi propi.
 - **Mode lleuger** (menú del perfil): lletra simple per línies i fons de color pla, sense WebGL ni animació per síl·laba.
 - **Sense Spotify**: música lliure d'[Audius](https://audius.co) (API pública) i els fitxers de la carpeta Música (`Artista - Títol.mp3`). Es pot entrar sense compte amb «Continua sense Spotify».
 
