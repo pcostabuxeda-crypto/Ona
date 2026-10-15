@@ -47,6 +47,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "shortDescription": "Ona — música lleugera"
+    "shortDescription": "Ona — música lleugera",
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      }
+    }
   }
 }
