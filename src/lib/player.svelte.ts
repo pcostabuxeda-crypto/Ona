@@ -41,6 +41,44 @@ class PlayerState {
   private preloaded = "";
   /** Cançó que el reproductor de Rust té carregada ("" si cap: per exemple, després de reiniciar l'app). */
   private inBackend = "";
+  /** Motor per a les pistes amb `src` (Audius, fitxers locals); Spotify va pel reproductor de Rust. */
+  private audioEl: HTMLAudioElement | null = null;
+
+  private get audio() {
+    if (this.audioEl) return this.audioEl;
+    const a = new Audio();
+    a.preload = "auto";
+    a.volume = this.volume;
+    const mine = () => !!this.current?.src && a.src === this.current.src;
+    a.addEventListener("waiting", () => mine() && (this.loading = true));
+    // Els fitxers locals no saben la durada fins que es carreguen.
+    a.addEventListener("loadedmetadata", () => {
+      if (mine() && this.current && !this.current.duration_ms && isFinite(a.duration)) this.current.duration_ms = Math.round(a.duration * 1000);
+    });
+    a.addEventListener("playing", () => {
+      if (!mine()) return;
+      this.loading = false;
+      this.setBase(a.currentTime * 1000, true);
+    });
+    a.addEventListener("pause", () => mine() && !a.ended && this.setBase(a.currentTime * 1000, false));
+    a.addEventListener("seeked", () => mine() && this.setBase(a.currentTime * 1000, !a.paused));
+    a.addEventListener("ended", () => mine() && this.advance(true));
+    a.addEventListener("error", () => mine() && this.advance(false));
+    this.audioEl = a;
+    return a;
+  }
+
+  /** Carrega i reprodueix una pista web a `ms`. */
+  private playWeb(src: string, ms: number) {
+    if (this.inBackend) {
+      A.pause();
+      this.inBackend = "";
+    }
+    const a = this.audio;
+    if (a.src !== src) a.src = src;
+    a.currentTime = ms / 1000;
+    a.play().catch(() => this.advance(false));
+  }
 
   current = $derived(this.pos >= 0 ? this.queue[this.order[this.pos]] : undefined);
   positionMs = $derived.by(() => {
@@ -50,6 +88,13 @@ class PlayerState {
     return Math.min(p, this.current.duration_ms);
   });
   progress = $derived(this.current ? this.positionMs / this.current.duration_ms : 0);
+
+  /** Posició exacta ara mateix, sense esperar el rellotge de 4 Hz (per a animacions per fotograma). */
+  liveMs() {
+    if (!this.current) return 0;
+    const p = this.playing ? this.baseMs + (performance.now() - this.baseAt) : this.baseMs;
+    return Math.min(p, this.current.duration_ms);
+  }
 
   async init() {
     try {
@@ -260,8 +305,13 @@ class PlayerState {
     this.loading = true;
     this.preloaded = "";
     this.setBase(0, false);
-    this.inBackend = t.uri;
-    A.playUri(t.uri);
+    if (t.src) {
+      this.playWeb(t.src, 0);
+    } else {
+      this.audioEl?.pause();
+      this.inBackend = t.uri;
+      A.playUri(t.uri);
+    }
     this.refreshPalette();
     this.save();
   }
@@ -281,7 +331,7 @@ class PlayerState {
   private preloadNext() {
     const n = this.nextPos();
     const t = n >= 0 ? this.queue[this.order[n]] : undefined;
-    if (t && t.uri !== this.preloaded) {
+    if (t && !t.src && t.uri !== this.preloaded) {
       this.preloaded = t.uri;
       A.preloadUri(t.uri);
     }
@@ -300,7 +350,11 @@ class PlayerState {
 
   toggle() {
     if (!this.current) return;
-    if (this.playing) {
+    if (this.current.src) {
+      if (this.playing) this.audio.pause();
+      else if (this.audio.src === this.current.src) this.audio.play().catch(() => {});
+      else this.playWeb(this.current.src, this.positionMs);
+    } else if (this.playing) {
       this.setBase(this.positionMs, false);
       A.pause();
     } else if (this.inBackend !== this.current.uri) {
@@ -337,13 +391,16 @@ class PlayerState {
   seekTo(ms: number) {
     if (!this.current) return;
     this.setBase(ms, this.playing);
-    if (this.inBackend === this.current.uri) A.seek(ms);
+    if (this.current.src) {
+      if (this.audioEl?.src === this.current.src) this.audioEl.currentTime = ms / 1000;
+    } else if (this.inBackend === this.current.uri) A.seek(ms);
     this.save();
   }
 
   setVolume(v: number) {
     this.volume = Math.min(1, Math.max(0, v));
     A.setVolume(this.volume);
+    if (this.audioEl) this.audioEl.volume = this.volume;
     try {
       localStorage.setItem("ona.volume", String(this.volume));
     } catch {}

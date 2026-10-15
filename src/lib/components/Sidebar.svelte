@@ -3,6 +3,7 @@
   import * as A from "$lib/api";
   import type { Collection } from "$lib/api";
   import { covers } from "$lib/covers.svelte";
+  import { TILES } from "$lib/tiles";
   import { player } from "$lib/player.svelte";
   import { ui } from "$lib/ui.svelte";
   import Cover from "./Cover.svelte";
@@ -19,6 +20,7 @@
   let wide = $state(false);
 
   $effect(() => {
+    if (ui.free) return;
     A.myPlaylists()
       .then((r) => {
         playlists = r;
@@ -29,14 +31,16 @@
     A.savedAlbums().then((r) => (albums = r)).catch(() => {});
   });
 
+  // Fitxers locals i Audius hi són sempre (no depenen del compte de Spotify).
+  const own = $derived(ui.free ? [A.LOCAL, A.AUDIUS] : [LIKED, A.LOCAL, A.AUDIUS]);
   const items = $derived(
     filter === "playlist"
-      ? [LIKED, ...playlists]
+      ? [...own, ...playlists]
       : filter === "artist"
         ? artists
         : filter === "album"
           ? albums
-          : [LIKED, ...playlists, ...artists, ...albums],
+          : [...own, ...playlists, ...artists, ...albums],
   );
   const small = $derived(collapsed && !wide);
 
@@ -65,8 +69,8 @@
     {#each items as c (c.kind + c.id)}
       <li>
         <button class="row" class:on={isOpen(c)} onclick={() => open(c)} title={c.name}>
-          {#if c.kind === "liked"}
-            <span class="liked"><Icon name="heart" size={small ? 18 : 20} /></span>
+          {#if TILES[c.kind]}
+            <span class="liked" style:background={TILES[c.kind]?.bg}><Icon name={TILES[c.kind]?.icon ?? ""} size={small ? 18 : 20} /></span>
           {:else}
             <Cover src={c.image ?? covers[c.id]} size={48} radius={4} round={c.kind === "artist"} />
           {/if}
@@ -154,7 +158,6 @@
     border-radius: 4px;
     display: grid;
     place-items: center;
-    background: linear-gradient(135deg, #450af5, #c4efd9);
   }
   .txt {
     flex: 1;

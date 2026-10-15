@@ -1,15 +1,18 @@
 <script lang="ts" module>
+  import type { Collection, Track } from "$lib/api";
+  type Results = { tracks: Track[]; artists: Collection[]; albums: Collection[]; playlists: Collection[]; audius: Track[] };
   // Es conserva la cerca en tornar enrere.
-  export const searchMemory: { q: string; results: Awaited<ReturnType<typeof A.search>> | null } = { q: "", results: null };
+  export const searchMemory: { q: string; results: Results | null } = { q: "", results: null };
 </script>
 
 <script lang="ts">
-  /** Resultats de la consulta "searchDesktop"; el text ve del cercador de la barra de dalt (ui.query). */
+  /** Cerca a Spotify (si hi ha compte) i a Audius; el text ve del cercador de la barra de dalt (ui.query). */
   import * as A from "$lib/api";
   import Card from "$lib/components/Card.svelte";
   import Cover from "$lib/components/Cover.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import TrackList from "$lib/components/TrackList.svelte";
+  import { audiusSearch } from "$lib/sources";
   import { ui } from "$lib/ui.svelte";
 
   let results = $state(searchMemory.results);
@@ -27,7 +30,12 @@
     const timer = setTimeout(async () => {
       const my = ++seq;
       try {
-        const r = await A.search(term);
+        const none = { tracks: [], artists: [], albums: [], playlists: [] };
+        const [sp, audius] = await Promise.all([
+          ui.free ? none : A.search(term).catch(() => none),
+          audiusSearch(term).catch(() => [] as Track[]),
+        ]);
+        const r: Results = { ...sp, audius };
         if (my === seq) {
           results = searchMemory.results = r;
           searchMemory.q = term;
@@ -54,15 +62,15 @@
           <div class="best" role="button" tabindex="0" onclick={open} onkeydown={(e) => e.key === "Enter" && open()}>
             <Cover src={top.image} size={92} radius={6} round={top.kind === "artist"} />
             <h3>{top.name}</h3>
-            <span class="muted"><span class="kind">{{ artist: "Artista", album: "Àlbum", playlist: "Playlist", liked: "" }[top.kind]}</span></span>
+            <span class="muted"><span class="kind">{top.kind === "artist" ? "Artista" : top.kind === "album" ? "Àlbum" : "Playlist"}</span></span>
             <span class="play-fab"><Icon name="play" size={24} /></span>
           </div>
         </div>
       {/if}
-      {#if results.tracks.length}
+      {#if results.tracks.length || (ui.free && results.audius.length)}
         <div class="songs">
           <h2>Cançons</h2>
-          <TrackList tracks={results.tracks.slice(0, 4)} context={`Cerca: ${ui.query}`} showAlbum={false} header={false} />
+          <TrackList tracks={(ui.free ? results.audius : results.tracks).slice(0, 4)} context={`Cerca: ${ui.query}`} showAlbum={false} header={false} />
         </div>
       {/if}
     </div>
@@ -75,6 +83,14 @@
         </div>
       {/if}
     {/each}
+
+    {#if !ui.free && results.audius.length}
+      <div class="shelf-title"><h2>A Audius</h2></div>
+      <TrackList tracks={results.audius.slice(0, 10)} context="Audius" showAlbum={false} header={false} />
+    {:else if ui.free && results.audius.length > 4}
+      <div class="shelf-title"><h2>Més a Audius</h2></div>
+      <TrackList tracks={results.audius.slice(4)} context="Audius" showAlbum={false} header={false} />
+    {/if}
   {/if}
 </section>
 

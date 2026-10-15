@@ -12,7 +12,7 @@
   $effect(() => {
     const t = player.current;
     liked = false;
-    if (t) A.isLiked([t.id]).then(([v]) => t === player.current && (liked = v)).catch(() => {});
+    if (t && !t.src) A.isLiked([t.id]).then(([v]) => t === player.current && (liked = v)).catch(() => {});
   });
 
   async function toggleLike() {
@@ -43,16 +43,16 @@
     {#if t}
       <button class="cover" onclick={() => ui.togglePanel("npv")} title="Ara sona"><Cover src={t.album.thumb} size={56} radius={4} /></button>
       <div class="txt">
-        <a class="name" href="#album" onclick={(e) => (e.preventDefault(), ui.go({ name: "collection", kind: "album", id: t.album.id }))}>{t.name}</a>
+        <a class="name" href="#album" onclick={(e) => (e.preventDefault(), t.album.id && ui.go({ name: "collection", kind: "album", id: t.album.id }))}>{t.name}</a>
         <span class="artists">
           {#each t.artists as a, j (a.id + j)}
-            {#if j > 0},&nbsp;{/if}<a href="#artist" onclick={(e) => (e.preventDefault(), ui.go({ name: "collection", kind: "artist", id: a.id }))}>{a.name}</a>
+            {#if j > 0},&nbsp;{/if}<a href="#artist" onclick={(e) => (e.preventDefault(), a.id && ui.go({ name: "collection", kind: "artist", id: a.id }))}>{a.name}</a>
           {/each}
         </span>
       </div>
-      <button class="ic like" class:on={liked} onclick={toggleLike} title={liked ? "Treu de Cançons que m'agraden" : "Desa a Cançons que m'agraden"}>
+      {#if !t.src}<button class="ic like" class:on={liked} onclick={toggleLike} title={liked ? "Treu de Cançons que m'agraden" : "Desa a Cançons que m'agraden"}>
         <Icon name={liked ? "check" : "addCircle"} size={16} />
-      </button>
+      </button>{/if}
     {/if}
   </div>
 

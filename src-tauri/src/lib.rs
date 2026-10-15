@@ -4,6 +4,7 @@
 //! protobuf, playlist4, col·lecció, context-resolve) amb la sessió de librespot: no cal cap Client ID propi.
 
 mod auth;
+mod local;
 mod lyrics;
 mod media;
 mod meta;
@@ -359,6 +360,13 @@ async fn artist(app: AppHandle, ona: State<'_, Ona>, id: String) -> Res<Value> {
     meta::artist(&ona.session(&app).await?, &id).await
 }
 
+/// Fitxers d'àudio de la carpeta Música (es reprodueixen amb l'<audio> de la interfície).
+#[tauri::command]
+async fn local_tracks(app: AppHandle) -> Res<Value> {
+    let dir = app.path().audio_dir().map_err(err)?;
+    tauri::async_runtime::spawn_blocking(move || local::tracks(&dir)).await.map_err(err)
+}
+
 /// Cerca de cançons: el context `spotify:search:<text>` que resol el reproductor.
 #[tauri::command]
 async fn search(app: AppHandle, ona: State<'_, Ona>, q: String) -> Res<Value> {
@@ -509,7 +517,14 @@ async fn get_lyrics(
     artist: String,
     album: String,
     duration_ms: u32,
+    syllables: Option<bool>,
 ) -> Res<Value> {
+    // Primer la de síl·labes (si no és el mode lleuger), després la de Spotify (per línies) i LRCLIB.
+    if syllables.unwrap_or(true) {
+        if let Some(found) = lyrics::from_betterlyrics(&ona.http, &title, &artist, &album, duration_ms).await {
+            return Ok(found);
+        }
+    }
     if let Ok(session) = ona.session(&app).await {
         if let Ok(track) = SpotifyId::from_base62(&id) {
             if let Ok(bytes) = session.spclient().get_lyrics(&track).await {
@@ -593,7 +608,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            restore, login, logout, play, preload, resume, pause, seek, set_volume, player_state, media::media_update, media::media_state, tracks, albums, artists, album, artist, search, context, rootlist, playlist, collection, collection_write, me,
+            restore, login, logout, play, preload, resume, pause, seek, set_volume, player_state, media::media_update, media::media_state, tracks, albums, artists, album, artist, search, local_tracks, context, rootlist, playlist, collection, collection_write, me,
             get_lyrics
         ])
         .run(tauri::generate_context!())

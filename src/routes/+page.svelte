@@ -29,10 +29,36 @@
     } catch (e) {
       error = String(e);
     }
+    if (freeSaved()) return enterFree();
     phase = "login";
   });
 
+  const FREE_KEY = "ona.free";
+  function freeSaved() {
+    try {
+      return localStorage.getItem(FREE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+  function setFree(free: boolean) {
+    ui.free = free;
+    try {
+      if (free) localStorage.setItem(FREE_KEY, "1");
+      else localStorage.removeItem(FREE_KEY);
+    } catch {}
+  }
+
+  /** Sense compte de Spotify: Audius i fitxers locals. */
+  function enterFree() {
+    setFree(true);
+    ui.user = { name: "Sense Spotify" };
+    ui.stack = [{ name: "home" }];
+    phase = "app";
+  }
+
   async function enter() {
+    setFree(false);
     phase = "app";
     try {
       const me = await A.me();
@@ -57,7 +83,8 @@
   }
 
   async function doLogout() {
-    await A.logout();
+    if (!ui.free) await A.logout();
+    setFree(false);
     phase = "login";
   }
 
@@ -98,7 +125,7 @@
   <TitleBar loggedIn={phase === "app"} onlogout={doLogout} />
 
   {#if phase === "login"}
-    <Login onlogin={doLogin} {busy} {error} />
+    <Login onlogin={doLogin} onfree={enterFree} {busy} {error} />
   {:else if phase === "app"}
     <div class="body" class:narrow>
       <Sidebar collapsed={width < 900} />

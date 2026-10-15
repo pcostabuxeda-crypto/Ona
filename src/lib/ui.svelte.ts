@@ -22,6 +22,8 @@ class Ui {
   /** Menú contextual obert (clic dret). */
   menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   user = $state<{ name: string; image?: string } | null>(null);
+  /** Sense compte de Spotify: només Audius i fitxers locals. */
+  free = $state(false);
   private toastTimer: ReturnType<typeof setTimeout> | undefined;
 
   go(v: View) {

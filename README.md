@@ -6,9 +6,14 @@ Client d'escriptori lleuger per a Spotify Premium (Windows). Poc consum de RAM/C
 - **Tauri 2** (WebView2) + **SvelteKit / Svelte 5** (adapter-static)
 - **Rust** amb `librespot` 0.8 per a la reproducció i les dades: els mateixos endpoints spclient que el client d'escriptori (metadades protobuf per lots, playlist4, col·lecció, context-resolve). No cal cap Client ID ni la Web API.
 
+## Funcions
+- Lletra per síl·laba ([Better Lyrics](https://better-lyrics.boidu.dev), API gratuïta) pintada amb `@braccato/core`, sobre un fons fluid fet amb la portada (`@kawarp/core`, WebGL). Si no n'hi ha, la de Spotify (per línies) o LRCLIB.
+- **Mode lleuger** (menú del perfil): lletra simple per línies i fons de color pla, sense WebGL ni animació per síl·laba.
+- **Sense Spotify**: música lliure d'[Audius](https://audius.co) (API pública) i els fitxers de la carpeta Música (`Artista - Títol.mp3`). Es pot entrar sense compte amb «Continua sense Spotify».
+
 ## Requisits
 - Node 22+, Rust (rustup) i Visual Studio Build Tools amb C++ (MSVC)
-- Compte Spotify Premium (l'inici de sessió s'obre al navegador)
+- Compte Spotify Premium per al catàleg de Spotify (l'inici de sessió s'obre al navegador); sense compte, només Audius i fitxers locals
 
 ## Arrencar en local
 ```bash

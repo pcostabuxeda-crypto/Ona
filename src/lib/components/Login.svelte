@@ -1,6 +1,6 @@
 <script lang="ts">
   /** Entrada amb el compte de Spotify al navegador (la sessió és la de librespot: no cal cap Client ID). */
-  let { onlogin, busy, error }: { onlogin: () => void; busy: boolean; error: string } = $props();
+  let { onlogin, onfree, busy, error }: { onlogin: () => void; onfree: () => void; busy: boolean; error: string } = $props();
 </script>
 
 <section class="login" data-tauri-drag-region>
@@ -12,6 +12,8 @@
     <p class="muted">Necessites un compte de Spotify Premium. S'obrirà el navegador per iniciar la sessió.</p>
     <button class="go" onclick={onlogin} disabled={busy}>{busy ? "Esperant el navegador…" : "Inicia sessió amb Spotify"}</button>
     {#if busy}<button class="retry" onclick={onlogin}>Torna a obrir el navegador</button>{/if}
+    <button class="free" onclick={onfree}>Continua sense Spotify</button>
+    <p class="muted small">Sense compte: música lliure d'Audius i els fitxers de la teva carpeta Música.</p>
     {#if error}<p class="err">{error}</p>{/if}
   </div>
 </section>
@@ -61,6 +63,20 @@
     font-size: 14px;
     color: var(--text-2);
     text-decoration: underline;
+  }
+  .free {
+    padding: 12px 28px;
+    border-radius: 999px;
+    border: 1px solid #727272;
+    font-weight: 700;
+  }
+  .free:hover {
+    border-color: #fff;
+    transform: scale(1.04);
+  }
+  .small {
+    font-size: 13px;
+    margin: 0;
   }
   .err {
     color: #f3727f;

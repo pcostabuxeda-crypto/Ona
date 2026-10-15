@@ -59,12 +59,14 @@
   const offset = $derived(scroller ? start : 0);
 
   function openArtist(e: MouseEvent, id: string) {
+    e.preventDefault();
     e.stopPropagation();
-    ui.go({ name: "collection", kind: "artist", id });
+    if (id) ui.go({ name: "collection", kind: "artist", id });
   }
   function openAlbum(e: MouseEvent, id: string) {
+    e.preventDefault();
     e.stopPropagation();
-    ui.go({ name: "collection", kind: "album", id });
+    if (id) ui.go({ name: "collection", kind: "album", id });
   }
   function addToQueue(e: MouseEvent, t: Track) {
     e.stopPropagation();

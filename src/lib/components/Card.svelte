@@ -3,6 +3,7 @@
   import * as A from "$lib/api";
   import type { Collection } from "$lib/api";
   import { covers } from "$lib/covers.svelte";
+  import { TILES } from "$lib/tiles";
   import { player } from "$lib/player.svelte";
   import { ui } from "$lib/ui.svelte";
   import Cover from "./Cover.svelte";
@@ -25,8 +26,8 @@
 
 <div class="card" role="button" tabindex="0" onclick={open} onkeydown={(e) => e.key === "Enter" && open()}>
   <div class="art">
-    {#if item.kind === "liked"}
-      <div class="liked"><Icon name="heart" size={48} /></div>
+    {#if TILES[item.kind]}
+      <div class="liked" style:background={TILES[item.kind]?.bg}><Icon name={TILES[item.kind]?.icon ?? ""} size={48} /></div>
     {:else}
       <Cover src={item.image ?? covers[item.id]} size="100%" radius={6} round={item.kind === "artist"} />
     {/if}
@@ -65,7 +66,6 @@
     border-radius: 6px;
     display: grid;
     place-items: center;
-    background: linear-gradient(135deg, #450af5, #c4efd9);
   }
   .play-fab {
     position: absolute;

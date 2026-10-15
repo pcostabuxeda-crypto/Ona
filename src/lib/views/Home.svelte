@@ -7,6 +7,7 @@
   import Cover from "$lib/components/Cover.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import { covers } from "$lib/covers.svelte";
+  import { TILES } from "$lib/tiles";
   import { player } from "$lib/player.svelte";
   import { ui } from "$lib/ui.svelte";
 
@@ -16,12 +17,12 @@
   let tint = $state("#333");
 
   $effect(() => {
-    A.home()
+    A.home(ui.free)
       .then((h) => {
         shortcuts = h.shortcuts;
         sections = h.sections;
         paletteFrom(h.shortcuts.find((c) => c.image)?.image).then((p) => (tint = p.a));
-        A.fillCovers(h.sections[0]?.items ?? []);
+        if (!ui.free) A.fillCovers(h.sections[0]?.items ?? []);
       })
       .catch(() => (failed = true));
   });
@@ -43,8 +44,8 @@
     <div class="shortcuts">
       {#each shortcuts as c (c.kind + c.id)}
         <div class="sc" role="button" tabindex="0" onclick={() => open(c)} onkeydown={(e) => e.key === "Enter" && open(c)}>
-          {#if c.kind === "liked"}
-            <span class="liked"><Icon name="heart" size={20} /></span>
+          {#if TILES[c.kind]}
+            <span class="liked" style:background={TILES[c.kind]?.bg}><Icon name={TILES[c.kind]?.icon ?? ""} size={20} /></span>
           {:else}
             <Cover src={c.image ?? covers[c.id]} size={56} radius={0} round={c.kind === "artist"} />
           {/if}
@@ -97,7 +98,6 @@
     flex: none;
     display: grid;
     place-items: center;
-    background: linear-gradient(135deg, #450af5, #c4efd9);
   }
   .sc > span:not(.liked) {
     flex: 1;

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { covers } from "./covers.svelte";
+import { audiusTrending, localTracks } from "./sources";
 
 export type Artist = { id: string; name: string };
 export type Track = {
@@ -10,9 +11,11 @@ export type Track = {
   album: { id: string; name: string; image?: string; thumb?: string };
   duration_ms: number;
   explicit: boolean;
+  /** Pistes que no són de Spotify (Audius, fitxers locals): URL que reprodueix l'<audio> de la interfície. */
+  src?: string;
 };
 export type Collection = {
-  kind: "playlist" | "album" | "liked" | "artist";
+  kind: "playlist" | "album" | "liked" | "artist" | "audius" | "local";
   id: string;
   name: string;
   subtitle: string;
@@ -20,7 +23,7 @@ export type Collection = {
   total?: number;
 };
 export type LyricLine = { t: number; text: string };
-export type Lyrics = { synced: boolean; source: string; lines: LyricLine[] } | null;
+export type Lyrics = { synced: boolean; source: string; lines: LyricLine[]; ttml?: string } | null;
 export type HomeSection = { title: string; items: Collection[] };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -90,13 +93,15 @@ export async function trackByUri(uri: string): Promise<Track | null> {
   return (await decorate([uri]))[0] ?? null;
 }
 
-export const getLyrics = (t: Track) =>
+/** `syllables`: demanar també la lletra per síl·laba (Better Lyrics); el mode lleuger no la fa servir. */
+export const getLyrics = (t: Track, syllables = true) =>
   invoke<Lyrics>("get_lyrics", {
     id: t.id,
     title: t.name,
     artist: t.artists[0]?.name ?? "",
     album: t.album.name ?? "",
     durationMs: t.duration_ms,
+    syllables,
   });
 
 // ---------- Contingut ----------
@@ -107,14 +112,15 @@ const LIKED: Collection = { kind: "liked", id: "liked", name: "Cançons que m'ag
  * Inici fet amb la teva biblioteca: sense la consulta GraphQL "home" (pathfinder no és accessible),
  * no hi ha les recomanacions personalitzades del client.
  */
-export async function home(): Promise<{ shortcuts: Collection[]; sections: HomeSection[] }> {
+export async function home(free = false): Promise<{ shortcuts: Collection[]; sections: HomeSection[] }> {
+  if (free) return { shortcuts: [LOCAL, AUDIUS], sections: [] };
   const [playlists, artists, albums] = await Promise.all([
     myPlaylists(),
     followedArtists().catch(() => []),
     savedAlbums().catch(() => []),
   ]);
   return {
-    shortcuts: [LIKED, ...playlists].slice(0, 8),
+    shortcuts: [LIKED, ...playlists.slice(0, 5), LOCAL, AUDIUS],
     sections: [
       { title: "Les teves playlists", items: playlists },
       { title: "Artistes que segueixes", items: artists },
@@ -182,7 +188,15 @@ export type Loaded = { info: Collection; tracks: Track[] };
 const artistData = (id: string) =>
   cached(`artist:${id}`, false, () => invoke<{ info: Collection; top: Track[]; albums: Collection[] }>("artist", { id }));
 
+export const AUDIUS: Collection = { kind: "audius", id: "trending", name: "Tendències a Audius", subtitle: "Música lliure i gratuïta" };
+export const LOCAL: Collection = { kind: "local", id: "music", name: "Fitxers locals", subtitle: "La carpeta Música" };
+
 export async function loadCollection(kind: Collection["kind"], id: string): Promise<Loaded> {
+  if (kind === "audius") return { info: AUDIUS, tracks: await audiusTrending() };
+  if (kind === "local") {
+    const tracks = await localTracks(true);
+    return { info: { ...LOCAL, total: tracks.length }, tracks };
+  }
   if (kind === "liked") {
     const uris = (await library("collection", true)).map((i) => i.uri).filter((u) => u.startsWith("spotify:track:"));
     const tracks = await decorate(uris);

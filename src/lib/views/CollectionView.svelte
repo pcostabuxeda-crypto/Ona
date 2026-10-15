@@ -7,6 +7,7 @@
   import Icon from "$lib/components/Icon.svelte";
   import TrackList from "$lib/components/TrackList.svelte";
   import { player } from "$lib/player.svelte";
+  import { TILES } from "$lib/tiles";
 
   let { kind, id, scroller }: { kind: Collection["kind"]; id: string; scroller?: HTMLElement } = $props();
 
@@ -19,14 +20,14 @@
     A.loadCollection(kind, id)
       .then(async (d) => {
         data = d;
-        tint = kind === "liked" ? "#5038a0" : (await paletteFrom(d.info.image)).a;
+        tint = TILES[kind]?.tint ?? (await paletteFrom(d.info.image)).a;
       })
       .catch(() => (failed = true));
     if (kind === "artist") A.artistAlbums(id).then((r) => (albums = r)).catch(() => {});
   });
 
   const totalMs = $derived(data?.tracks.reduce((s, t) => s + t.duration_ms, 0) ?? 0);
-  const label = $derived({ playlist: "Playlist", album: "Àlbum", liked: "Playlist", artist: "Artista verificat" }[kind]);
+  const label = $derived(({ playlist: "Playlist", album: "Àlbum", liked: "Playlist", artist: "Artista verificat", audius: "Audius", local: "Al teu ordinador" } as const)[kind]);
   const ctx = $derived(data?.info.name ?? "");
   const playingHere = $derived(player.playing && player.context === ctx && !!ctx);
 
@@ -61,8 +62,8 @@
       </header>
     {:else}
       <header class="head">
-        {#if kind === "liked"}
-          <div class="liked"><Icon name="heart" size={80} /></div>
+        {#if TILES[kind]}
+          <div class="liked" style:background={TILES[kind]?.bg}><Icon name={TILES[kind]?.icon ?? ""} size={80} /></div>
         {:else}
           <Cover src={data.info.image} size={232} radius={4} />
         {/if}
@@ -122,7 +123,6 @@
     border-radius: 4px;
     display: grid;
     place-items: center;
-    background: linear-gradient(135deg, #450af5, #c4efd9);
     box-shadow: 0 4px 60px rgb(0 0 0 / 0.5);
   }
   .meta {

@@ -20,7 +20,7 @@
 
   const t = $derived(player.current!);
   const next = $derived(player.upcoming[0]);
-  const goArtist = (id: string) => ui.go({ name: "collection", kind: "artist", id });
+  const goArtist = (id: string) => id && ui.go({ name: "collection", kind: "artist", id });
 </script>
 
 <aside class="panel">
