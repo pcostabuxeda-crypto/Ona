@@ -1,0 +1,157 @@
+<script lang="ts">
+  /**
+   * Lletra amb síl·labes que s'il·luminen (@braccato/core) sobre un fons fluid fet amb la portada
+   * (@kawarp/core, WebGL). Tot s'atura quan la música para o la finestra no es veu.
+   */
+  import { onMount } from "svelte";
+  import "@braccato/core/element";
+  import "@braccato/core/styles/variables.css";
+  import "@braccato/core/styles/lyrics.css";
+  import "@braccato/core/styles/instrumental.css";
+  import { detectParser } from "@braccato/parsers";
+  import type { Lyric } from "@braccato/types";
+  import { Kawarp } from "@kawarp/core";
+  import type { Lyrics } from "$lib/api";
+  import { player } from "$lib/player.svelte";
+
+  let { lyrics }: { lyrics: NonNullable<Lyrics> } = $props();
+
+  let canvas: HTMLCanvasElement;
+  let view: HTMLElement & { lyrics: Lyric[] | null; currentTime: number; playing: boolean; theme: string; renderer?: { noteUserScroll(): void } | null };
+  let kawarp = $state.raw<Kawarp | null>(null);
+
+  /** TTML (síl·labes) o línies amb temps → format de braccato. */
+  const lines = $derived.by((): Lyric[] => {
+    const dur = player.current?.duration_ms ?? 0;
+    if (lyrics.ttml) {
+      try {
+        return detectParser(lyrics.ttml).parse(lyrics.ttml, dur);
+      } catch {}
+    }
+    return lyrics.lines.map((l, i) => {
+      const end = lyrics.lines[i + 1]?.t ?? dur;
+      return { startTimeMs: l.t, durationMs: Math.max(0, end - l.t), words: l.text || "♪" };
+    });
+  });
+
+  $effect(() => {
+    if (view) view.lyrics = lines;
+  });
+
+  // Fons: la portada actual.
+  $effect(() => {
+    const src = player.current?.album.image;
+    if (kawarp && src) kawarp.loadImage(src).catch((e) => console.warn("kawarp", e));
+  });
+
+  // Només s'anima mentre sona i es veu.
+  let visible = $state(!document.hidden);
+  $effect(() => {
+    if (!kawarp) return;
+    if (player.playing && visible) kawarp.start();
+    else kawarp.stop();
+  });
+
+  onMount(() => {
+    view.theme = `
+      .blyrics-container {
+        --blyrics-font-size: clamp(26px, 3.2vw, 40px);
+        --blyrics-lyric-active-color: #fff;
+        --blyrics-lyric-inactive-color: rgb(255 255 255 / 0.35);
+        font-family: var(--font-title);
+        font-weight: 700;
+      }`;
+    try {
+      kawarp = new Kawarp(canvas, { blurPasses: 6, animationSpeed: 0.6, saturation: 1.3 });
+    } catch {
+      kawarp = null; // sense WebGL: es queda el color de fons
+    }
+    const onVis = () => (visible = !document.hidden);
+    document.addEventListener("visibilitychange", onVis);
+    // Resolució interna petita: el desenfocament no deixa veure la diferència i la GPU treballa molt menys.
+    const fit = () => {
+      const r = canvas.getBoundingClientRect();
+      canvas.width = 256;
+      canvas.height = Math.max(1, Math.round((256 * r.height) / Math.max(1, r.width)));
+      kawarp?.resize();
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(canvas);
+
+    // El rellotge de braccato: només mentre sona (en pausa, n'hi ha prou amb un fotograma).
+    let raf = 0;
+    const tick = () => {
+      view.currentTime = player.liveMs() / 1000;
+      view.playing = player.playing;
+      raf = player.playing && visible ? requestAnimationFrame(tick) : 0;
+    };
+    const stopWatch = $effect.root(() => {
+      $effect(() => {
+        void player.playing;
+        void visible;
+        void player.positionMs; // salts de posició en pausa
+        if (!raf) tick();
+      });
+    });
+
+    const seek = (e: Event) => player.seekTo((e as CustomEvent<{ timeS: number }>).detail.timeS * 1000);
+    view.addEventListener("braccato:line-click", seek);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      stopWatch();
+      ro.disconnect();
+      document.removeEventListener("visibilitychange", onVis);
+      view.removeEventListener("braccato:line-click", seek);
+      kawarp?.dispose();
+    };
+  });
+</script>
+
+<div class="rich" style:--bg={player.palette.a}>
+  <canvas bind:this={canvas}></canvas>
+  <braccato-lyrics bind:this={view} onwheel={() => view.renderer?.noteUserScroll()}></braccato-lyrics>
+  <p class="src">Lletra: {lyrics.source}{lyrics.ttml ? " · betterlyrics.org" : ""}</p>
+</div>
+
+<style>
+  .rich {
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  /* Vel fosc perquè el text blanc es llegeixi sobre portades clares. */
+  .rich::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgb(0 0 0 / 0.3);
+    pointer-events: none;
+  }
+  braccato-lyrics {
+    position: relative;
+    z-index: 1;
+    display: block;
+    height: 100%;
+    overflow-y: auto;
+    padding: 0 40px;
+    scrollbar-width: none;
+  }
+  .src {
+    position: absolute;
+    z-index: 1;
+    left: 40px;
+    bottom: 8px;
+    margin: 0;
+    font-size: 12px;
+    color: rgb(255 255 255 / 0.6);
+  }
+</style>

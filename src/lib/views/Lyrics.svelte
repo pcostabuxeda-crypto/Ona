@@ -1,8 +1,13 @@
 <script lang="ts">
-  /** Lletra a la vista central, com al client: fons del color de la portada i la línia activa en blanc. */
+  /**
+   * Lletra a la vista central. Normal: síl·labes i fons fluid (RichLyrics). Mode lleuger, o lletra
+   * sense temps: línies sobre el color de la portada, com al client.
+   */
   import * as A from "$lib/api";
   import type { Lyrics } from "$lib/api";
+  import RichLyrics from "$lib/components/RichLyrics.svelte";
   import { player } from "$lib/player.svelte";
+  import { settings } from "$lib/settings.svelte";
 
   const LEAD_MS = 250;
   const memo = new Map<string, Lyrics>();
@@ -13,22 +18,26 @@
 
   $effect(() => {
     const t = player.current;
+    const syllables = !settings.light;
     if (!t) return;
-    if (memo.has(t.id)) {
-      lyrics = memo.get(t.id);
+    const key = `${t.id}:${syllables}`;
+    if (memo.has(key)) {
+      lyrics = memo.get(key);
       return;
     }
     lyrics = undefined;
-    A.getLyrics(t)
+    A.getLyrics(t, syllables)
       .then((l) => {
-        memo.set(t.id, l);
+        memo.set(key, l);
         if (t === player.current) lyrics = l;
       })
       .catch(() => t === player.current && (lyrics = null));
   });
 
+  const rich = $derived(!settings.light && !!lyrics?.synced && (!!lyrics.ttml || lyrics.lines.length > 0));
+
   const active = $derived.by(() => {
-    if (!lyrics?.synced) return -1;
+    if (rich || !lyrics?.synced) return -1;
     const p = player.positionMs + LEAD_MS;
     let lo = 0,
       hi = lyrics.lines.length - 1,
@@ -55,29 +64,35 @@
 
 <svelte:window onwheel={() => (userScrollAt = performance.now())} />
 
-<section class="lyrics" style:--bg={player.palette.a} bind:this={box}>
-  {#if !player.current}
-    <p class="msg">Posa alguna cançó.</p>
-  {:else if lyrics === undefined}
-    <p class="msg">Carregant la lletra…</p>
-  {:else if lyrics === null || !lyrics.lines.length}
-    <p class="msg">Encara no tenim la lletra d'aquesta cançó.</p>
-  {:else}
-    {#each lyrics.lines as line, i (i)}
-      <button
-        class="line"
-        class:past={lyrics.synced && i < active}
-        class:now={i === active}
-        class:future={lyrics.synced && i > active}
-        data-i={i}
-        onclick={() => lyrics?.synced && player.seekTo(line.t)}
-      >
-        {line.text || "♪"}
-      </button>
-    {/each}
-    <p class="src">Lletra proporcionada per {lyrics.source}</p>
-  {/if}
-</section>
+{#if rich && lyrics}
+  {#key player.current?.id}
+    <RichLyrics {lyrics} />
+  {/key}
+{:else}
+  <section class="lyrics" style:--bg={player.palette.a} bind:this={box}>
+    {#if !player.current}
+      <p class="msg">Posa alguna cançó.</p>
+    {:else if lyrics === undefined}
+      <p class="msg">Carregant la lletra…</p>
+    {:else if lyrics === null || !lyrics.lines.length}
+      <p class="msg">Encara no tenim la lletra d'aquesta cançó.</p>
+    {:else}
+      {#each lyrics.lines as line, i (i)}
+        <button
+          class="line"
+          class:past={lyrics.synced && i < active}
+          class:now={i === active}
+          class:future={lyrics.synced && i > active}
+          data-i={i}
+          onclick={() => lyrics?.synced && player.seekTo(line.t)}
+        >
+          {line.text || "♪"}
+        </button>
+      {/each}
+      <p class="src">Lletra proporcionada per {lyrics.source}</p>
+    {/if}
+  </section>
+{/if}
 
 <style>
   .lyrics {
