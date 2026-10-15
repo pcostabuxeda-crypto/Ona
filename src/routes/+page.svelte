@@ -6,36 +6,23 @@
   import TitleBar from "$lib/components/TitleBar.svelte";
   import Sidebar from "$lib/components/Sidebar.svelte";
   import PlayerBar from "$lib/components/PlayerBar.svelte";
-  import NowPlaying from "$lib/components/NowPlaying.svelte";
+  import NowPlayingPanel from "$lib/components/NowPlayingPanel.svelte";
   import Queue from "$lib/components/Queue.svelte";
   import Login from "$lib/components/Login.svelte";
   import Home from "$lib/views/Home.svelte";
   import Search from "$lib/views/Search.svelte";
-  import Library from "$lib/views/Library.svelte";
+  import Lyrics from "$lib/views/Lyrics.svelte";
   import CollectionView from "$lib/views/CollectionView.svelte";
-  import Settings from "$lib/views/Settings.svelte";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
-  import { persistSettings, settings } from "$lib/settings.svelte";
-  import ThemeBackground from "$lib/components/ThemeBackground.svelte";
-  import { loadCustomImage, themeById } from "$lib/themes";
-  import { setContext } from "svelte";
-
-  // La imatge pròpia es comparteix amb la configuració (que la pot canviar).
-  const bgImage = $state({ value: loadCustomImage() });
-  setContext("bgImage", bgImage);
-  const theme = $derived(themeById(settings.theme));
-
-  persistSettings();
 
   let phase = $state<"boot" | "login" | "app">("boot");
   let busy = $state(false);
   let error = $state("");
   let scroller = $state<HTMLElement>();
-  let clientId = $state<string | null>(null);
+  let width = $state(1200);
 
   onMount(async () => {
     await player.init();
-    clientId = await A.getClientId();
     try {
       const user = await A.restore();
       if (user) return enter();
@@ -49,21 +36,16 @@
     phase = "app";
     try {
       const me = await A.me();
-      ui.user = me.display_name ?? me.id;
+      ui.user = { name: me.name ?? me.uri ?? "", image: me.image_url };
     } catch (e) {
       if (String(e).includes("not_logged_in")) phase = "login";
-      else ui.user = "";
     }
   }
 
-  async function doLogin(newId?: string) {
+  async function doLogin() {
     busy = true;
     error = "";
     try {
-      if (newId) {
-        await A.setClientId(newId);
-        clientId = newId.trim();
-      }
       await A.login();
       await enter();
     } catch (e) {
@@ -85,11 +67,14 @@
     scroller?.scrollTo({ top: 0 });
   });
 
+  // Com el client: amb la finestra estreta, el panell de la dreta flota per sobre.
+  const narrow = $derived(width < 1000);
+
   function onKey(e: KeyboardEvent) {
     const typing = (e.target as HTMLElement)?.closest("input, textarea");
-    if ((e.ctrlKey && e.key.toLowerCase() === "k") || (!typing && e.key === "/")) {
+    if (e.ctrlKey && e.key.toLowerCase() === "k") {
       e.preventDefault();
-      ui.go({ name: "search" });
+      document.querySelector<HTMLInputElement>("#search")?.focus();
       return;
     }
     if (typing || phase !== "app") return;
@@ -98,58 +83,45 @@
       player.toggle();
     } else if (e.key === "ArrowRight" && e.ctrlKey) player.next();
     else if (e.key === "ArrowLeft" && e.ctrlKey) player.prev();
-    else if (e.key === "ArrowRight") player.seekTo(player.positionMs + 5000);
-    else if (e.key === "ArrowLeft") player.seekTo(Math.max(0, player.positionMs - 5000));
-    else if (e.key === "ArrowUp") player.setVolume(player.volume + 0.05);
-    else if (e.key === "ArrowDown") player.setVolume(player.volume - 0.05);
-    else if (e.key.toLowerCase() === "l") ui.setNowPlaying(!ui.nowPlaying);
-    else if (e.key === "Escape" && ui.nowPlaying) ui.setNowPlaying(false);
-    else if (e.key === "Backspace" || (e.altKey && e.key === "ArrowLeft")) ui.back();
+    else if (e.key === "ArrowRight" && e.shiftKey) player.seekTo(player.positionMs + 5000);
+    else if (e.key === "ArrowLeft" && e.shiftKey) player.seekTo(Math.max(0, player.positionMs - 5000));
+    else if (e.key === "ArrowUp" && e.ctrlKey) player.setVolume(player.volume + 0.1);
+    else if (e.key === "ArrowDown" && e.ctrlKey) player.setVolume(player.volume - 0.1);
+    else if (e.altKey && e.key === "ArrowLeft") ui.back();
+    else if (e.altKey && e.key === "ArrowRight") ui.fwd();
   }
 </script>
 
-<svelte:window onkeydown={onKey} />
+<svelte:window onkeydown={onKey} bind:innerWidth={width} />
 
-
-<div
-  class="app"
-  class:themed={theme.id !== "ona"}
-  style:--pa={player.palette.a}
-  style:--pb={player.palette.b}
-  style:--theme-accent={theme.accent}
-  style:--pa-alpha={settings.panelAlpha}
->
-  <ThemeBackground customImage={bgImage.value} />
-  <TitleBar />
+<div class="app">
+  <TitleBar loggedIn={phase === "app"} onlogout={doLogout} />
 
   {#if phase === "login"}
-    <Login onlogin={doLogin} {busy} {error} hasClientId={!!clientId} />
+    <Login onlogin={doLogin} {busy} {error} />
   {:else if phase === "app"}
-    <div class="body">
-      <Sidebar onlogout={doLogout} />
-      <div class="stage">
-        <main bind:this={scroller}>
+    <div class="body" class:narrow>
+      <Sidebar collapsed={width < 900} />
+      <main bind:this={scroller}>
+        {#if ui.view.name === "home"}
+          <Home />
+        {:else if ui.view.name === "search"}
+          <Search />
+        {:else if ui.view.name === "lyrics"}
+          <Lyrics />
+        {:else if ui.view.name === "collection"}
           {#key ui.view}
-            <div class="view">
-              {#if ui.view.name === "home"}
-                <Home />
-              {:else if ui.view.name === "search"}
-                <Search />
-              {:else if ui.view.name === "library"}
-                <Library />
-              {:else if ui.view.name === "settings"}
-                <Settings />
-              {:else if ui.view.name === "collection"}
-                <CollectionView kind={ui.view.kind} id={ui.view.id} {scroller} />
-              {/if}
-            </div>
+            <CollectionView kind={ui.view.kind} id={ui.view.id} {scroller} />
           {/key}
-        </main>
-      </div>
-      {#if ui.queueOpen}<Queue />{/if}
+        {/if}
+      </main>
+      {#if ui.panel === "npv" && player.current}
+        <NowPlayingPanel />
+      {:else if ui.panel === "queue"}
+        <Queue />
+      {/if}
     </div>
     <PlayerBar />
-    {#if ui.nowPlaying}<NowPlaying />{/if}
   {/if}
 
   <ContextMenu />
@@ -161,61 +133,51 @@
 
 <style>
   .app {
-    --accent: var(--theme-accent, color-mix(in oklab, var(--pa) 55%, white));
-    /* Fons dels panells: gairebé invisibles al tema Ona, vidre fosc als temes amb fons. */
-    --panel: rgb(255 255 255 / 0.03);
-    --panel-solid: #13121c;
-    --panel-line: rgb(255 255 255 / 0.05);
-    position: relative;
     height: 100vh;
     display: flex;
     flex-direction: column;
-    isolation: isolate;
+    background: var(--bg);
   }
-  .app.themed {
-    --panel: rgb(8 6 18 / var(--pa-alpha));
-    --panel-solid: rgb(8 6 18 / calc(var(--pa-alpha) + 0.25));
-    --panel-line: rgb(255 255 255 / 0.1);
-  }
-
   .body {
     position: relative;
     flex: 1;
     min-height: 0;
     display: flex;
-    gap: 10px;
-    padding-bottom: 10px;
+    gap: var(--gap);
+    padding: 0 var(--gap);
   }
-  .stage {
+  main {
     position: relative;
     flex: 1;
     min-width: 0;
-    border-radius: 22px;
-    overflow: hidden;
-    background: var(--panel);
-    border: 1px solid var(--panel-line);
-  }
-  main {
-    view-transition-name: stage;
-    height: 100%;
+    border-radius: var(--radius);
+    background: var(--base);
     overflow-y: auto;
     overflow-x: hidden;
   }
-  .view {
-    min-height: 100%;
+  .body :global(> aside.panel) {
+    width: 280px;
+    flex: none;
+  }
+  .narrow :global(> aside.panel) {
+    position: absolute;
+    right: var(--gap);
+    top: 0;
+    bottom: 0;
+    z-index: 20;
+    box-shadow: -8px 0 24px rgb(0 0 0 / 0.5);
   }
   .toast {
     position: fixed;
     left: 50%;
-    bottom: 112px;
+    bottom: 96px;
     transform: translateX(-50%);
     z-index: 100;
-    padding: 10px 18px;
-    border-radius: 999px;
-    background: var(--text);
-    color: #0b0b12;
+    padding: 8px 16px;
+    border-radius: 4px;
+    background: #3d91f4;
+    color: #fff;
     font-weight: 600;
-    box-shadow: 0 12px 30px -10px rgb(0 0 0 / 0.8);
-    animation: rise 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.5);
   }
 </style>

@@ -27,7 +27,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"
 sha2 = "0.10"
 base64 = "0.22"
 rand = "0.8"
-rustfft = "6"
+protobuf = "3"
 souvlaki = "0.8"
 
 [target.'cfg(windows)'.dependencies]

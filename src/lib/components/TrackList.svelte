@@ -14,9 +14,10 @@
     scroller,
     showAlbum = true,
     showCover = true,
-  }: { tracks: Track[]; context?: string; scroller?: HTMLElement; showAlbum?: boolean; showCover?: boolean } = $props();
+    header = true,
+  }: { tracks: Track[]; context?: string; scroller?: HTMLElement; showAlbum?: boolean; showCover?: boolean; header?: boolean } = $props();
 
-  const ROW = 58;
+  const ROW = 56;
   const OVERSCAN = 8;
   let list: HTMLElement;
   let start = $state(0);
@@ -98,6 +99,16 @@
   }
 </script>
 
+<div class="tl">
+{#if header}
+  <div class="row head" class:noalbum={!showAlbum}>
+    <span class="idx">#</span>
+    <span>Títol</span>
+    {#if showAlbum}<span class="album">Àlbum</span>{/if}
+    <span></span>
+    <span class="dur"><Icon name="clock" size={16} /></span>
+  </div>
+{/if}
 <div class="list" bind:this={list} style:height={scroller ? `${tracks.length * ROW}px` : null} class:virtual={!!scroller}>
   {#each visible as t, i (t.id + ":" + (offset + i))}
     {@const n = offset + i}
@@ -122,7 +133,7 @@
         {/if}
       </span>
       <span class="main">
-        {#if showCover}<Cover src={t.album.thumb} size={40} radius={6} />{/if}
+        {#if showCover}<Cover src={t.album.thumb} size={40} radius={4} />{/if}
         <span class="txt">
           <span class="name">{t.name}</span>
           <span class="artists">
@@ -143,11 +154,14 @@
     </div>
   {/each}
 </div>
+</div>
 
 <style>
+  .tl {
+    container-type: inline-size;
+  }
   .list {
     position: relative;
-    container-type: inline-size;
   }
   .virtual .row {
     position: absolute;
@@ -156,22 +170,34 @@
     top: 0;
   }
   .row {
-    height: 58px;
+    height: 56px;
     display: grid;
-    grid-template-columns: 40px minmax(0, 1.4fr) minmax(0, 1fr) 40px 56px;
+    grid-template-columns: 16px minmax(0, 4fr) minmax(0, 3fr) 32px 56px;
     align-items: center;
-    gap: 12px;
-    padding: 0 12px;
-    border-radius: 10px;
+    gap: 16px;
+    padding: 0 16px;
+    border-radius: 4px;
     cursor: default;
     transition: background 0.15s;
     contain: layout paint;
   }
   .row.noalbum {
-    grid-template-columns: 40px minmax(0, 1fr) 40px 56px;
+    grid-template-columns: 16px minmax(0, 1fr) 32px 56px;
   }
-  .row:hover {
-    background: rgb(255 255 255 / 0.06);
+  .row:not(.head):hover {
+    background: rgb(255 255 255 / 0.1);
+  }
+  .head {
+    height: 36px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid rgb(255 255 255 / 0.1);
+    border-radius: 0;
+    font-size: 14px;
+    color: var(--text-2);
+  }
+  .head .dur {
+    display: flex;
+    justify-content: flex-end;
   }
   .row.active .name {
     color: var(--accent);
@@ -179,9 +205,9 @@
   .idx {
     display: grid;
     place-items: center;
-    color: var(--text-3);
+    color: var(--text-2);
     font-variant-numeric: tabular-nums;
-    font-size: 13px;
+    font-size: 16px;
   }
   .playicon {
     display: none;
@@ -213,12 +239,12 @@
     text-overflow: ellipsis;
   }
   .name {
-    font-weight: 550;
+    font-size: 16px;
     color: var(--text);
   }
   .artists,
   .album {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text-2);
   }
   a {
@@ -235,9 +261,9 @@
     width: 15px;
     height: 15px;
     margin-right: 6px;
-    border-radius: 3px;
-    background: rgb(255 255 255 / 0.18);
-    color: var(--text);
+    border-radius: 2px;
+    background: rgb(255 255 255 / 0.6);
+    color: #000;
     font-size: 9px;
     font-weight: 700;
     vertical-align: 1px;
@@ -257,8 +283,8 @@
   }
   .dur {
     text-align: right;
-    font-size: 13px;
-    color: var(--text-3);
+    font-size: 14px;
+    color: var(--text-2);
     font-variant-numeric: tabular-nums;
   }
   .eq {
@@ -295,9 +321,9 @@
   @container (max-width: 560px) {
     .row,
     .row.noalbum {
-      grid-template-columns: 30px minmax(0, 1fr) 32px 44px;
-      gap: 8px;
-      padding: 0 6px;
+      grid-template-columns: 16px minmax(0, 1fr) 32px 44px;
+      gap: 12px;
+      padding: 0 8px;
     }
     .album {
       display: none;
