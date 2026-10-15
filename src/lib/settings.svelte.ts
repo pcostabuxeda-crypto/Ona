@@ -8,7 +8,8 @@ type Settings = {
 
 function load(): Settings {
   try {
-    return { light: false, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") };
+    // Només els camps d'ara: la clau la compartia l'Ona 0.1 (temes, visualitzador...).
+    return { light: JSON.parse(localStorage.getItem(KEY) ?? "{}").light === true };
   } catch {
     return { light: false };
   }
