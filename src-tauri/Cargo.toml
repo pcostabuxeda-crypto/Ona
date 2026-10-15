@@ -1,6 +1,6 @@
 [package]
 name = "ona"
-version = "0.3.0"
+version = "0.4.0"
 description = "Ona: client de Spotify lleuger"
 authors = ["you"]
 edition = "2021"
