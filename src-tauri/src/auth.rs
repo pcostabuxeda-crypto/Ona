@@ -1,8 +1,8 @@
 //! OAuth de Spotify (codi d'autorització + PKCE) amb tornada a 127.0.0.1:5588.
 //! Substitueix `librespot-oauth`, que es bloqueja per sempre esperant el navegador
 //! i deixa el port ocupat si l'usuari no acaba.
-//! PENDENT (port a iOS, pas 5): a l'iPhone Safari no torna a un port local de l'app;
-//! caldrà ASWebAuthenticationSession o un esquema d'URL propi (p. ex. ona://login).
+//! A iOS la pàgina de Spotify s'obre dins la vista de l'app (vegeu `open_login` a lib.rs): l'app
+//! no passa a segon pla i el port local continua escoltant.
 
 use std::time::Duration;
 
