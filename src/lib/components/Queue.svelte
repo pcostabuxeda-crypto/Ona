@@ -152,7 +152,7 @@
   {#if rows.user.length}
     <span class="label">
       A continuació a la teva cua
-      <button class="clear" onclick={clearUser}>Buida la cua</button>
+      <button class="clear" onclick={clearUser} aria-label="Buida la cua">Buida</button>
     </span>
     {@render list("user", rows.user)}
   {/if}
