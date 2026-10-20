@@ -59,6 +59,9 @@ class PlayerState {
   upNext = $state<Track[]>([]);
   /** La pista que sona si ve de la cua de l'usuari (el context es queda on era). */
   fromUser = $state<Track | null>(null);
+  /** El que sona perquè ho ha posat el mòbil (Spotify Connect); té prioritat sobre la cua d'Ona. */
+  remote = $state<Track | null>(null);
+  private localMs = 0;
 
   playing = $state(false);
   loading = $state(false);
@@ -140,7 +143,7 @@ class PlayerState {
     });
   }
 
-  current = $derived(this.fromUser ?? (this.pos >= 0 ? this.queue[this.order[this.pos]] : undefined));
+  current = $derived(this.remote ?? this.fromUser ?? (this.pos >= 0 ? this.queue[this.order[this.pos]] : undefined));
   positionMs = $derived.by(() => {
     void this.now;
     return this.liveMs();
@@ -194,6 +197,24 @@ class PlayerState {
       }
     });
 
+    // Spotify Connect: el mòbil fa sonar Ona. Rust ja ha posat en pausa el reproductor local.
+    await listen<{ kind: string; uri?: string; position_ms?: number }>("connect", async ({ payload: e }) => {
+      if (e.kind === "inactive") return this.leaveRemote();
+      if (!e.uri) return;
+      if (this.remote?.uri !== e.uri) {
+        const t = await A.trackByUri(e.uri).catch(() => null);
+        if (!t) return;
+        if (!this.remote) {
+          this.localMs = this.positionMs;
+          this.audioEl?.pause();
+        }
+        this.remote = t;
+        this.refreshPalette();
+      }
+      this.loading = e.kind === "loading";
+      if (e.kind !== "loading") this.setBase(e.position_ms ?? 0, e.kind === "playing");
+    });
+
     // Botons del sistema: tecles multimèdia, caràtula de Windows, FluentFlyout...
     await listen<{ action: string; ms?: number }>("media", ({ payload: m }) => {
       if (m.action === "play" && !this.playing) this.toggle();
@@ -226,7 +247,7 @@ class PlayerState {
 
   /** Desa la posició (petita) sempre, i la cua (gran) només si ha canviat des de l'últim cop. */
   save() {
-    if (!this.current) return;
+    if (!this.current || this.remote) return;
     try {
       localStorage.setItem(POS_KEY, JSON.stringify({ uri: this.current.uri, positionMs: Math.round(this.positionMs) }));
     } catch {}
@@ -428,7 +449,20 @@ class PlayerState {
     this.touch();
   }
 
+  /** Connect ja no fa sonar res aquí: es torna a la cançó d'Ona, en pausa on s'havia quedat. */
+  private async leaveRemote() {
+    if (!this.remote) return;
+    this.remote = null;
+    this.loading = false;
+    // El reproductor local diu la veritat (pot ser que ja soni el que s'ha triat a Ona).
+    const live = await A.playerState().catch(() => null);
+    if (live && live.uri === this.current?.uri) this.setBase(live.position_ms, live.playing);
+    else this.setBase(this.localMs, false);
+    this.refreshPalette();
+  }
+
   private load() {
+    this.remote = null; // reproduir des d'Ona allibera Connect (ho fa Rust a `play`)
     const t = this.current;
     if (!t) return;
     this.loading = true;
@@ -501,6 +535,7 @@ class PlayerState {
   }
 
   toggle() {
+    if (this.remote) return void A.connectCmd("toggle");
     if (!this.current) return;
     if (this.current.src) {
       if (this.playing) this.audio.pause();
@@ -522,10 +557,12 @@ class PlayerState {
   }
 
   next() {
+    if (this.remote) return void A.connectCmd("next");
     if (this.step(this.repeat !== "off")) this.load();
   }
 
   prev() {
+    if (this.remote) return void A.connectCmd("prev");
     if (this.positionMs > 3000) return this.seekTo(0);
     // Des d'una pista de la cua de l'usuari es torna a la del context.
     if (this.fromUser) {
@@ -557,6 +594,7 @@ class PlayerState {
   seekTo(ms: number) {
     if (!this.current) return;
     this.setBase(ms, this.playing);
+    if (this.remote) return void A.connectCmd("seek", ms);
     if (this.current.src) {
       if (this.audioEl?.src === this.current.src) this.audioEl.currentTime = ms / 1000;
     } else if (this.inBackend === this.current.uri) this.call(A.seek(ms));

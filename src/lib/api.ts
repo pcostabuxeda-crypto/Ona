@@ -92,6 +92,9 @@ export const me = () => cached("me", false, () => invoke<any>("me"));
 export const playUri = (uri: string, position_ms = 0) => invoke("play", { uri, positionMs: position_ms });
 export const preloadUri = (uri: string) => invoke("preload", { uri });
 export const resume = () => invoke("resume");
+/** Ordre al Spotify Connect quan el que sona ho ha posat el mòbil. */
+export const connectCmd = (action: "toggle" | "next" | "prev" | "seek", ms?: number) =>
+  invoke("connect_cmd", { action, ms: ms == null ? null : Math.round(ms) }).catch(() => {});
 export const pause = () => invoke("pause");
 export const seek = (position_ms: number) => invoke("seek", { positionMs: Math.round(position_ms) });
 export const setVolume = (volume: number) => invoke("set_volume", { volume });

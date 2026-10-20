@@ -4,6 +4,7 @@
 //! protobuf, playlist4, col·lecció, context-resolve) amb la sessió de librespot: no cal cap Client ID propi.
 
 mod auth;
+mod connect;
 mod local;
 mod lyrics;
 mod media;
@@ -78,6 +79,7 @@ struct Ona {
     /// Inici de sessió en curs al navegador; un de nou cancel·la l'anterior (i allibera el port).
     pending_login: std::sync::Mutex<Option<tokio::task::AbortHandle>>,
     now: SharedNow,
+    connect: connect::Connect,
 }
 
 impl Ona {
@@ -109,15 +111,20 @@ impl Ona {
         let user = session.username();
 
         let mut inner = self.inner.lock().await;
-        match &inner.player {
-            Some(player) => player.set_session(session.clone()),
+        let player = match &inner.player {
+            Some(player) => {
+                player.set_session(session.clone());
+                player.clone()
+            }
             None => {
                 let player = self.make_player(session.clone())?;
                 forward_events(app.clone(), &player, self.now.clone());
-                inner.player = Some(player);
+                inner.player = Some(player.clone());
+                player
             }
-        }
+        };
         inner.session = Some(session);
+        self.connect.start(app.clone(), self.cache()?, player);
         Ok(user)
     }
 
@@ -299,6 +306,7 @@ async fn login(app: AppHandle, ona: State<'_, Ona>) -> Res<String> {
 
 #[tauri::command]
 async fn logout(ona: State<'_, Ona>) -> Res<()> {
+    ona.connect.shutdown();
     let mut inner = ona.inner.lock().await;
     if let Some(player) = &inner.player {
         player.stop();
@@ -312,9 +320,16 @@ async fn logout(ona: State<'_, Ona>) -> Res<()> {
 
 // ---------- Reproductor ----------
 
+/// Botons d'Ona mentre sona el que ha posat el mòbil (Spotify Connect).
+#[tauri::command]
+fn connect_cmd(ona: State<'_, Ona>, action: String, ms: Option<u32>) -> Res<()> {
+    ona.connect.command(&action, ms)
+}
+
 #[tauri::command]
 async fn play(app: AppHandle, ona: State<'_, Ona>, uri: String, position_ms: Option<u32>) -> Res<()> {
     let uri = SpotifyUri::from_uri(&uri).map_err(err)?;
+    ona.connect.release();
     ona.player(&app).await?.load(uri, true, position_ms.unwrap_or(0));
     Ok(())
 }
@@ -328,6 +343,7 @@ async fn preload(app: AppHandle, ona: State<'_, Ona>, uri: String) -> Res<()> {
 
 #[tauri::command]
 async fn resume(app: AppHandle, ona: State<'_, Ona>) -> Res<()> {
+    ona.connect.release();
     ona.player(&app).await?.play();
     Ok(())
 }
@@ -347,8 +363,9 @@ async fn seek(app: AppHandle, ona: State<'_, Ona>, position_ms: u32) -> Res<()> 
 /// `volume` de 0.0 a 1.0.
 #[tauri::command]
 fn set_volume(ona: State<'_, Ona>, volume: f64) {
-    ona.mixer
-        .set_volume((volume.clamp(0.0, 1.0) * u16::MAX as f64) as u16);
+    let v = (volume.clamp(0.0, 1.0) * u16::MAX as f64) as u16;
+    ona.mixer.set_volume(v);
+    ona.connect.set_volume(v);
 }
 
 // ---------- Endpoints interns i lletres ----------
@@ -606,6 +623,7 @@ pub fn run() {
                 http,
                 pending_login: Default::default(),
                 now: Default::default(),
+                connect: Default::default(),
             });
             Ok(())
         })
@@ -630,7 +648,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            restore, login, logout, play, preload, resume, pause, seek, set_volume, player_state, media::media_update, media::media_state, tracks, albums, artists, album, artist, search, local_tracks, context, rootlist, playlist, collection, collection_write, me,
+            restore, login, logout, connect_cmd, play, preload, resume, pause, seek, set_volume, player_state, media::media_update, media::media_state, tracks, albums, artists, album, artist, search, local_tracks, context, rootlist, playlist, collection, collection_write, me,
             get_lyrics
         ])
         .run(tauri::generate_context!())
