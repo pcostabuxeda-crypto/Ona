@@ -2,10 +2,14 @@ import { listen } from "@tauri-apps/api/event";
 import * as A from "./api";
 import type { Track } from "./api";
 import { DEFAULT_PALETTE, paletteFrom, type Palette } from "./color";
+import { nextStep, shuffleRest, unshuffleRest } from "./queue";
+import { ui } from "./ui.svelte";
 
 type Repeat = "off" | "all" | "one";
 
 const SESSION_KEY = "ona.session";
+/** La posició va a part: es desa sovint i és petita (la cua només quan canvia). */
+const POS_KEY = "ona.pos";
 const MAX_SAVED = 3000;
 
 type Saved = {
@@ -15,18 +19,28 @@ type Saved = {
   context: string;
   shuffle: boolean;
   repeat: Repeat;
-  positionMs: number;
+  upNext?: Track[];
+  fromUser?: Track | null;
+  /** Sessions antigues (abans de POS_KEY). */
+  positionMs?: number;
 };
 
 class PlayerState {
+  /** Context: la playlist, àlbum... que sona. */
   queue = $state<Track[]>([]);
   /** Ordre de reproducció (índexs de `queue`); canvia amb l'aleatori. */
   order = $state<number[]>([]);
   pos = $state(-1);
   context = $state("");
+  /** Cua de l'usuari: sona abans que el context, en ordre d'arribada (com Spotify). */
+  upNext = $state<Track[]>([]);
+  /** La pista que sona si ve de la cua de l'usuari (el context es queda on era). */
+  fromUser = $state<Track | null>(null);
 
   playing = $state(false);
   loading = $state(false);
+  /** Darrer error de reproducció (es mostra a la barra fins que sona alguna cosa). */
+  error = $state<string | null>(null);
   shuffle = $state(false);
   repeat = $state<Repeat>("off");
   volume = $state(0.7);
@@ -37,12 +51,17 @@ class PlayerState {
   private baseAt = 0;
   /** Rellotge que avança 4 cops per segon només mentre sona. */
   now = $state(0);
+  /** Canvia quan canvia la base del temps (play, pausa, salt): la lletra flotant s'hi sincronitza. */
+  epoch = $state(0);
   private ticker: ReturnType<typeof setInterval> | null = null;
   private preloaded = "";
   /** Cançó que el reproductor de Rust té carregada ("" si cap: per exemple, després de reiniciar l'app). */
   private inBackend = "";
   /** Motor per a les pistes amb `src` (Audius, fitxers locals); Spotify va pel reproductor de Rust. */
   private audioEl: HTMLAudioElement | null = null;
+  /** La cua ha canviat i s'ha de tornar a desar. */
+  private dirty = false;
+  private inited = false;
 
   private get audio() {
     if (this.audioEl) return this.audioEl;
@@ -58,12 +77,13 @@ class PlayerState {
     a.addEventListener("playing", () => {
       if (!mine()) return;
       this.loading = false;
+      this.error = null;
       this.setBase(a.currentTime * 1000, true);
     });
     a.addEventListener("pause", () => mine() && !a.ended && this.setBase(a.currentTime * 1000, false));
     a.addEventListener("seeked", () => mine() && this.setBase(a.currentTime * 1000, !a.paused));
     a.addEventListener("ended", () => mine() && this.advance(true));
-    a.addEventListener("error", () => mine() && this.advance(false));
+    a.addEventListener("error", () => mine() && this.skipUnavailable());
     this.audioEl = a;
     return a;
   }
@@ -71,32 +91,44 @@ class PlayerState {
   /** Carrega i reprodueix una pista web a `ms`. */
   private playWeb(src: string, ms: number) {
     if (this.inBackend) {
-      A.pause();
+      this.call(A.pause());
       this.inBackend = "";
     }
     const a = this.audio;
     if (a.src !== src) a.src = src;
     a.currentTime = ms / 1000;
-    a.play().catch(() => this.advance(false));
+    a.play().catch(() => this.skipUnavailable());
   }
 
-  current = $derived(this.pos >= 0 ? this.queue[this.order[this.pos]] : undefined);
+  /** Les ordres al reproductor de Rust: si fallen, l'usuari ho ha de veure (abans es perdien). */
+  private call(p: Promise<unknown>) {
+    p.catch((e) => {
+      this.loading = false;
+      this.setBase(this.positionMs, false);
+      this.error = String(e).includes("not_logged_in")
+        ? "Cal tornar a iniciar sessió amb Spotify."
+        : "No s'ha pogut reproduir.";
+    });
+  }
+
+  current = $derived(this.fromUser ?? (this.pos >= 0 ? this.queue[this.order[this.pos]] : undefined));
   positionMs = $derived.by(() => {
     void this.now;
-    if (!this.current) return 0;
-    const p = this.playing ? this.baseMs + (performance.now() - this.baseAt) : this.baseMs;
-    return Math.min(p, this.current.duration_ms);
+    return this.liveMs();
   });
-  progress = $derived(this.current ? this.positionMs / this.current.duration_ms : 0);
+  progress = $derived(this.current?.duration_ms ? this.positionMs / this.current.duration_ms : 0);
 
   /** Posició exacta ara mateix, sense esperar el rellotge de 4 Hz (per a animacions per fotograma). */
   liveMs() {
     if (!this.current) return 0;
     const p = this.playing ? this.baseMs + (performance.now() - this.baseAt) : this.baseMs;
-    return Math.min(p, this.current.duration_ms);
+    return this.current.duration_ms ? Math.min(p, this.current.duration_ms) : p;
   }
 
   async init() {
+    // Un sol cop: si es tornés a cridar, els esdeveniments es gestionarien dues vegades (salts dobles).
+    if (this.inited) return;
+    this.inited = true;
     try {
       const v = Number(localStorage.getItem("ona.volume"));
       if (v >= 0 && v <= 1 && localStorage.getItem("ona.volume") !== null) this.volume = v;
@@ -111,6 +143,7 @@ class PlayerState {
           break;
         case "playing":
           this.loading = false;
+          this.error = null;
           this.setBase(e.position_ms ?? 0, true);
           break;
         case "paused":
@@ -124,7 +157,7 @@ class PlayerState {
           this.advance(true);
           break;
         case "unavailable":
-          this.advance(false);
+          this.skipUnavailable();
           break;
         case "stopped":
           this.setBase(0, false);
@@ -150,14 +183,26 @@ class PlayerState {
     });
 
     await this.restoreSession();
-    // Mini memòria: es desa cada pocs segons mentre sona, i en tancar la finestra.
+    // Mini memòria: la posició cada pocs segons mentre sona; la cua, només si ha canviat.
     setInterval(() => this.playing && this.save(), 5000);
     addEventListener("beforeunload", () => this.save());
   }
 
-  /** Desa la cua i la posició per poder-les recuperar si es recarrega o es reinicia l'app. */
+  /** Marca la cua com a canviada i la desa (la còpia gran només es fa quan cal). */
+  private touch() {
+    this.dirty = true;
+    this.preloaded = "";
+    this.save();
+  }
+
+  /** Desa la posició (petita) sempre, i la cua (gran) només si ha canviat des de l'últim cop. */
   save() {
     if (!this.current) return;
+    try {
+      localStorage.setItem(POS_KEY, JSON.stringify({ uri: this.current.uri, positionMs: Math.round(this.positionMs) }));
+    } catch {}
+    if (!this.dirty) return;
+    this.dirty = false;
     let { queue, order, pos } = this;
     if (queue.length > MAX_SAVED) {
       // Es guarda un tros de la cua al voltant de la cançó actual.
@@ -174,7 +219,8 @@ class PlayerState {
       context: this.context,
       shuffle: this.shuffle,
       repeat: this.repeat,
-      positionMs: Math.round(this.positionMs),
+      upNext: $state.snapshot(this.upNext) as Track[],
+      fromUser: $state.snapshot(this.fromUser) as Track | null,
     };
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify(data));
@@ -184,8 +230,10 @@ class PlayerState {
   /** En arrencar: recupera la cua desada i, si Rust encara està sonant, la posició real. */
   private async restoreSession() {
     let saved: Saved | null = null;
+    let savedPos: { uri: string; positionMs: number } | null = null;
     try {
       saved = JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null");
+      savedPos = JSON.parse(localStorage.getItem(POS_KEY) ?? "null");
     } catch {}
     if (saved?.queue?.length && saved.order?.length && saved.pos >= 0 && saved.pos < saved.order.length) {
       this.queue = saved.queue;
@@ -194,6 +242,8 @@ class PlayerState {
       this.context = saved.context ?? "";
       this.shuffle = !!saved.shuffle;
       this.repeat = saved.repeat ?? "off";
+      this.upNext = saved.upNext ?? [];
+      this.fromUser = saved.fromUser ?? null;
     }
 
     const live = await A.playerState().catch(() => null);
@@ -205,6 +255,7 @@ class PlayerState {
         this.order = [0];
         this.pos = 0;
         this.context = "";
+        this.fromUser = null;
       }
     }
     if (live && live.uri === this.current?.uri) {
@@ -212,13 +263,32 @@ class PlayerState {
       this.setBase(live.position_ms, live.playing);
     } else if (this.current) {
       // L'app s'ha reiniciat: la cançó queda en pausa on era, i el play la torna a carregar.
-      this.setBase(saved?.positionMs ?? 0, false);
+      const ms = savedPos?.uri === this.current.uri ? savedPos.positionMs : (saved?.positionMs ?? 0);
+      this.setBase(ms, false);
     }
     if (this.current) this.refreshPalette();
   }
 
+  /** En tancar la sessió de Spotify: la cua de Spotify ja no es pot reproduir. */
+  forget() {
+    if (this.playing) this.toggle();
+    this.queue = [];
+    this.order = [];
+    this.pos = -1;
+    this.upNext = [];
+    this.fromUser = null;
+    this.context = "";
+    this.error = null;
+    this.inBackend = "";
+    try {
+      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(POS_KEY);
+    } catch {}
+  }
+
   private setBase(ms: number, playing: boolean) {
     if (this.current) A.mediaState(playing, ms);
+    this.epoch++;
     this.baseMs = ms;
     this.baseAt = performance.now();
     this.playing = playing;
@@ -232,77 +302,99 @@ class PlayerState {
     }
   }
 
-  /** Reprodueix `tracks` començant per `start`. */
+  /** Reprodueix `tracks` començant per `start`. La cua de l'usuari es conserva (com Spotify). */
   playList(tracks: Track[], start = 0, context = "") {
     this.queue = tracks;
     this.context = context;
     this.order = tracks.map((_, i) => i);
+    this.fromUser = null;
     if (this.shuffle) {
       this.order = shuffled(this.order, start);
       this.pos = 0;
     } else {
       this.pos = start;
     }
+    this.dirty = true;
     this.load();
   }
 
-  /** Afegeix una cançó just després de l'actual. */
+  /** Al davant de la cua de l'usuari: sona just després de l'actual. */
   playNext(t: Track) {
-    if (this.pos < 0) return this.playList([t]);
-    this.queue = [...this.queue, t];
-    const order = [...this.order];
-    order.splice(this.pos + 1, 0, this.queue.length - 1);
-    this.order = order;
-    this.preloaded = "";
-    this.save();
+    if (!this.current) return this.playList([t]);
+    this.upNext = [t, ...this.upNext];
+    this.touch();
   }
 
-  /** Afegeix al final de la cua. */
+  /** Al final de la cua de l'usuari (però abans que la resta del context). */
   addToQueue(t: Track) {
-    if (this.pos < 0) return this.playList([t]);
-    this.queue = [...this.queue, t];
-    this.order = [...this.order, this.queue.length - 1];
-    this.preloaded = "";
-    this.save();
+    if (!this.current) return this.playList([t]);
+    this.upNext = [...this.upNext, t];
+    this.touch();
   }
 
-  /** Les cançons que vénen (fins a 100), amb la seva posició dins de `order`. */
+  /** El que ve del context (fins a 100), amb la seva posició dins de `order`. */
   upcoming = $derived(
     this.order.slice(this.pos + 1, this.pos + 101).map((qi, k) => ({ track: this.queue[qi], key: qi, at: this.pos + 1 + k })),
   );
   upcomingTotal = $derived(Math.max(0, this.order.length - this.pos - 1));
 
-  /** Treu de la cua la cançó que és a la posició `at` de l'ordre. */
+  /** Treu del context la cançó que és a la posició `at` de l'ordre. */
   removeAt(at: number) {
     if (at <= this.pos || at >= this.order.length) return;
     const order = [...this.order];
     order.splice(at, 1);
     this.order = order;
-    this.preloaded = "";
-    this.save();
+    this.touch();
   }
 
-  /** Mou una cançó de la cua d'una posició a una altra (totes dues per davant de l'actual). */
+  /** Mou una cançó del context d'una posició a una altra (totes dues per davant de l'actual). */
   move(from: number, to: number) {
     if (from <= this.pos || to <= this.pos || from === to) return;
     const order = [...this.order];
     const [x] = order.splice(from, 1);
     order.splice(Math.min(to, order.length), 0, x);
     this.order = order;
-    this.preloaded = "";
-    this.save();
+    this.touch();
+  }
+
+  /** Mou un element de la cua de l'usuari. */
+  moveUser(from: number, to: number) {
+    if (from === to || from < 0 || from >= this.upNext.length) return;
+    const list = [...this.upNext];
+    const [x] = list.splice(from, 1);
+    list.splice(Math.max(0, Math.min(to, list.length)), 0, x);
+    this.upNext = list;
+    this.touch();
+  }
+
+  removeUser(i: number) {
+    this.upNext = this.upNext.filter((_, k) => k !== i);
+    this.touch();
+  }
+
+  /** Buida la cua de l'usuari; retorna el que hi havia per poder-ho desfer. */
+  clearUser(): Track[] {
+    const was = this.upNext;
+    this.upNext = [];
+    this.touch();
+    return was;
+  }
+
+  restoreUser(list: Track[]) {
+    this.upNext = [...list, ...this.upNext];
+    this.touch();
   }
 
   clearUpcoming() {
     this.order = this.order.slice(0, this.pos + 1);
-    this.preloaded = "";
-    this.save();
+    this.touch();
   }
 
   private load() {
     const t = this.current;
     if (!t) return;
     this.loading = true;
+    this.error = null;
     this.preloaded = "";
     this.setBase(0, false);
     if (t.src) {
@@ -310,10 +402,16 @@ class PlayerState {
     } else {
       this.audioEl?.pause();
       this.inBackend = t.uri;
-      A.playUri(t.uri);
+      this.call(A.playUri(t.uri));
     }
     this.refreshPalette();
+    this.dirty = true;
     this.save();
+  }
+
+  /** Torna a provar la pista que ha fallat. */
+  retry() {
+    this.load();
   }
 
   private async refreshPalette() {
@@ -322,69 +420,99 @@ class PlayerState {
     if (t === this.current) this.palette = p;
   }
 
-  private nextPos(): number {
-    if (this.repeat === "one") return this.pos;
-    if (this.pos + 1 < this.order.length) return this.pos + 1;
-    return this.repeat === "all" ? 0 : -1;
+  /** La pista que sonarà després de l'actual (per precarregar-la). */
+  private nextTrack(): Track | undefined {
+    if (this.repeat === "one") return this.current;
+    const n = nextStep(this.upNext.length, this.pos, this.order.length, this.repeat === "all");
+    return n === "user" ? this.upNext[0] : n >= 0 ? this.queue[this.order[n]] : undefined;
   }
 
   private preloadNext() {
-    const n = this.nextPos();
-    const t = n >= 0 ? this.queue[this.order[n]] : undefined;
+    const t = this.nextTrack();
     if (t && !t.src && t.uri !== this.preloaded) {
       this.preloaded = t.uri;
-      A.preloadUri(t.uri);
+      A.preloadUri(t.uri).catch(() => {});
     }
+  }
+
+  /** Passa a la següent: primer la cua de l'usuari, després el context. Fals si no n'hi ha cap. */
+  private step(wrap: boolean): boolean {
+    const n = nextStep(this.upNext.length, this.pos, this.order.length, wrap);
+    if (n === "user") {
+      this.fromUser = this.upNext[0];
+      this.upNext = this.upNext.slice(1);
+    } else if (n >= 0) {
+      this.fromUser = null;
+      this.pos = n;
+    } else return false;
+    return true;
   }
 
   /** Final de cançó (natural o per error). */
   private advance(natural: boolean) {
-    const n = natural ? this.nextPos() : this.pos + 1 < this.order.length ? this.pos + 1 : -1;
-    if (n < 0) {
-      this.setBase(0, false);
-      return;
-    }
-    this.pos = n;
-    this.load();
+    if (natural && this.repeat === "one") return this.load();
+    if (this.step(natural && this.repeat === "all")) return this.load();
+    this.setBase(0, false);
+  }
+
+  /** La pista no es pot reproduir: s'avisa i se salta. */
+  private skipUnavailable() {
+    const t = this.current;
+    if (t) ui.say(`S'ha saltat «${t.name}»: no està disponible.`);
+    this.advance(false);
   }
 
   toggle() {
     if (!this.current) return;
     if (this.current.src) {
       if (this.playing) this.audio.pause();
-      else if (this.audio.src === this.current.src) this.audio.play().catch(() => {});
+      else if (this.audio.src === this.current.src) this.audio.play().catch(() => this.skipUnavailable());
       else this.playWeb(this.current.src, this.positionMs);
     } else if (this.playing) {
       this.setBase(this.positionMs, false);
-      A.pause();
+      this.call(A.pause());
     } else if (this.inBackend !== this.current.uri) {
       // Després de reiniciar: es carrega la cançó on s'havia quedat.
       this.loading = true;
+      this.error = null;
       this.inBackend = this.current.uri;
-      A.playUri(this.current.uri, Math.round(this.positionMs));
+      this.call(A.playUri(this.current.uri, Math.round(this.positionMs)));
     } else {
-      A.resume();
+      this.call(A.resume());
     }
     this.save();
   }
 
   next() {
-    if (this.pos + 1 < this.order.length) this.pos++;
-    else if (this.repeat !== "off") this.pos = 0;
-    else return;
-    this.load();
+    if (this.step(this.repeat !== "off")) this.load();
   }
 
   prev() {
-    if (this.positionMs > 3000 || this.pos <= 0) return this.seekTo(0);
+    if (this.positionMs > 3000) return this.seekTo(0);
+    // Des d'una pista de la cua de l'usuari es torna a la del context.
+    if (this.fromUser) {
+      this.fromUser = null;
+      return this.load();
+    }
+    if (this.pos <= 0) return this.seekTo(0);
     this.pos--;
     this.load();
   }
 
-  /** Salta a la posició `at` de l'ordre. */
+  /** Salta a la posició `at` de l'ordre del context. */
   jumpTo(at: number) {
     if (at <= this.pos || at >= this.order.length) return;
+    this.fromUser = null;
     this.pos = at;
+    this.load();
+  }
+
+  /** Reprodueix ara l'element `i` de la cua de l'usuari. */
+  jumpToUser(i: number) {
+    const t = this.upNext[i];
+    if (!t) return;
+    this.fromUser = t;
+    this.upNext = this.upNext.filter((_, k) => k !== i);
     this.load();
   }
 
@@ -393,7 +521,7 @@ class PlayerState {
     this.setBase(ms, this.playing);
     if (this.current.src) {
       if (this.audioEl?.src === this.current.src) this.audioEl.currentTime = ms / 1000;
-    } else if (this.inBackend === this.current.uri) A.seek(ms);
+    } else if (this.inBackend === this.current.uri) this.call(A.seek(ms));
     this.save();
   }
 
@@ -406,23 +534,16 @@ class PlayerState {
     } catch {}
   }
 
+  /** L'aleatori només barreja el que encara ha de sonar del context; la cua de l'usuari no es toca. */
   toggleShuffle() {
     this.shuffle = !this.shuffle;
-    if (this.pos < 0) return;
-    const cur = this.order[this.pos];
-    if (this.shuffle) {
-      this.order = shuffled(this.queue.map((_, i) => i), cur);
-      this.pos = 0;
-    } else {
-      this.order = this.queue.map((_, i) => i);
-      this.pos = cur;
-    }
-    this.preloaded = "";
+    if (this.pos >= 0) this.order = this.shuffle ? shuffleRest(this.order, this.pos) : unshuffleRest(this.order, this.pos);
+    this.touch();
   }
 
   cycleRepeat() {
     this.repeat = this.repeat === "off" ? "all" : this.repeat === "all" ? "one" : "off";
-    this.preloaded = "";
+    this.touch();
   }
 }
 
