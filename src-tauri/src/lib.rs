@@ -6,6 +6,11 @@
 mod auth;
 mod local;
 mod lyrics;
+// Controls multimèdia del sistema: souvlaki a l'escriptori, MediaPlayer a iOS.
+#[cfg(desktop)]
+mod media;
+#[cfg(target_os = "ios")]
+#[path = "media_ios.rs"]
 mod media;
 mod meta;
 mod pb;
@@ -26,6 +31,7 @@ use librespot::{
 };
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, State};
+#[cfg(desktop)]
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::Mutex;
 
@@ -263,9 +269,7 @@ async fn browser_oauth(app: &AppHandle, ona: &Ona, client_id: String) -> Res<aut
     let http = ona.http.clone();
     let opener = app.clone();
     let task = tauri::async_runtime::spawn(async move {
-        auth::authorize(&http, &client_id, OAUTH_SCOPES, |url| {
-            opener.opener().open_url(url, None::<&str>).map_err(err)
-        })
+        auth::authorize(&http, &client_id, OAUTH_SCOPES, |url| open_login(&opener, url))
         .await
     });
     if let Some(prev) = ona
@@ -282,6 +286,19 @@ async fn browser_oauth(app: &AppHandle, ona: &Ona, client_id: String) -> Res<aut
     }
 }
 
+/// Escriptori: el navegador del sistema. Mòbil: la mateixa vista de l'app, que així es queda en
+/// primer pla i pot rebre la tornada a 127.0.0.1:5588 (l'ID de client oficial de Spotify no
+/// accepta cap altra adreça de tornada, ni un esquema propi com ona://).
+fn open_login(app: &AppHandle, url: &str) -> Res<()> {
+    #[cfg(mobile)]
+    {
+        let w = app.get_webview_window("main").ok_or("no_window")?;
+        w.navigate(url.parse().map_err(err)?).map_err(err)
+    }
+    #[cfg(desktop)]
+    app.opener().open_url(url, None::<&str>).map_err(err)
+}
+
 /// Inicia sessió amb el compte de Spotify (librespot, client oficial) al navegador.
 #[tauri::command]
 async fn login(app: AppHandle, ona: State<'_, Ona>) -> Res<String> {
@@ -292,8 +309,19 @@ async fn login(app: AppHandle, ona: State<'_, Ona>) -> Res<String> {
             r => return r,
         }
     }
-    let token = browser_oauth(&app, &ona, SessionConfig::default().client_id).await?;
-    ona.start(&app, Credentials::with_access_token(token.access)).await
+    // A mòbil l'OAuth surt de l'app dins la mateixa vista: en acabar (bé o malament) s'hi torna,
+    // i la interfície recarregada recupera la sessió amb `restore`.
+    #[cfg(mobile)]
+    let back = app.get_webview_window("main").and_then(|w| w.url().ok());
+    let r = match browser_oauth(&app, &ona, SessionConfig::default().client_id).await {
+        Ok(token) => ona.start(&app, Credentials::with_access_token(token.access)).await,
+        Err(e) => Err(e),
+    };
+    #[cfg(mobile)]
+    if let (Some(w), Some(url)) = (app.get_webview_window("main"), back) {
+        let _ = w.navigate(url);
+    }
+    r
 }
 
 #[tauri::command]
@@ -583,16 +611,18 @@ fn set_low_memory(window: &tauri::WebviewWindow, low: bool) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn,ona=info")).try_init();
-    tauri::Builder::default()
-        // Només una Ona oberta: si se n'obre una altra, es tanca i porta la primera al davant.
-        // (Ha d'anar primer de tot.)
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.unminimize();
-                let _ = w.show();
-                let _ = w.set_focus();
-            }
-        }))
+    // Només una Ona oberta: si se n'obre una altra, es tanca i porta la primera al davant.
+    // (Ha d'anar primer de tot.)
+    let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.unminimize();
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+    }));
+    builder
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
@@ -600,9 +630,8 @@ pub fn run() {
             let http = reqwest::Client::builder()
                 .user_agent(concat!("Ona/", env!("CARGO_PKG_VERSION"), " (https://github.com/)"))
                 .build()?;
-            let media = media::Media::default();
-            media.set(media::init(app.handle()));
-            app.manage(media);
+            #[cfg(any(desktop, target_os = "ios"))]
+            app.manage(media::init(app.handle()));
             app.manage(Ona {
                 inner: Mutex::new(Inner::default()),
                 mixer: Arc::new(mixer),
@@ -634,7 +663,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            restore, login, logout, play, preload, resume, pause, seek, set_volume, player_state, media::media_update, media::media_state, tracks, albums, artists, album, artist, search, local_tracks, context, rootlist, playlist, collection, collection_write, me,
+            restore, login, logout, play, preload, resume, pause, seek, set_volume, player_state, #[cfg(any(desktop, target_os = "ios"))] media::media_update, #[cfg(any(desktop, target_os = "ios"))] media::media_state, tracks, albums, artists, album, artist, search, local_tracks, context, rootlist, playlist, collection, collection_write, me,
             get_lyrics
         ])
         .run(tauri::generate_context!())

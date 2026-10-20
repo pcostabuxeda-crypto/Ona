@@ -1,0 +1,22 @@
+{
+  "project": "Ona",
+  "platform": "ios",
+  "github": {
+    "owner": "pcostabuxeda-crypto",
+    "repo": "Ona"
+  },
+  "provider": "github",
+  "codemagic": {},
+  "bitrise": {},
+  "ios": {
+    "path": "src-tauri/gen/apple",
+    "scheme": "ona_iOS",
+    "configuration": "release"
+  },
+  "flutter": {
+    "watch": {}
+  },
+  "reactNative": {},
+  "kmp": {},
+  "mobai": {}
+}

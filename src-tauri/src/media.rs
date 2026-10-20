@@ -7,11 +7,14 @@ use serde_json::json;
 use souvlaki::{MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, MediaPosition, PlatformConfig, SeekDirection};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-#[derive(Default)]
 pub struct Media(Mutex<Option<MediaControls>>);
 
 /// Registra Ona als controls multimèdia del sistema. Cal la finestra (HWND) ja creada.
-pub fn init(app: &AppHandle) -> Option<MediaControls> {
+pub fn init(app: &AppHandle) -> Media {
+    Media(Mutex::new(controls(app)))
+}
+
+fn controls(app: &AppHandle) -> Option<MediaControls> {
     let window = app.get_webview_window("main")?;
     let hwnd = window.hwnd().ok()?.0 as *mut c_void;
     let mut controls = MediaControls::new(PlatformConfig {
@@ -46,12 +49,6 @@ pub fn init(app: &AppHandle) -> Option<MediaControls> {
         .map_err(|e| log::warn!("SMTC attach: {e}"))
         .ok()?;
     Some(controls)
-}
-
-impl Media {
-    pub fn set(&self, controls: Option<MediaControls>) {
-        *self.0.lock().unwrap() = controls;
-    }
 }
 
 /// Cançó actual (null si no sona res).

@@ -32,7 +32,7 @@
   });
 
   // Fitxers locals i Audius hi són sempre (no depenen del compte de Spotify).
-  const own = $derived(ui.free ? [A.LOCAL, A.AUDIUS] : [LIKED, A.LOCAL, A.AUDIUS]);
+  const own = $derived(ui.free ? [...A.LOCALS, A.AUDIUS] : [LIKED, ...A.LOCALS, A.AUDIUS]);
   const items = $derived(
     filter === "playlist"
       ? [...own, ...playlists]
