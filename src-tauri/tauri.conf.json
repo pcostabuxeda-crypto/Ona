@@ -48,6 +48,9 @@
       "icons/icon.ico"
     ],
     "shortDescription": "Ona — música lleugera",
+    "iOS": {
+      "frameworks": ["AudioToolbox", "AVFoundation"]
+    },
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico"

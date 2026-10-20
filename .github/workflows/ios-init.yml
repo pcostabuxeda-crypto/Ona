@@ -4,7 +4,7 @@ name: iOS init
 on:
   workflow_dispatch:
   push:
-    paths: [.github/workflows/ios-init.yml]
+    paths: [.github/workflows/ios-init.yml, src-tauri/tauri.conf.json]
 permissions:
   contents: write
 jobs:
@@ -25,6 +25,8 @@ jobs:
           npm ci
           rustup target add aarch64-apple-ios aarch64-apple-ios-sim
           npx tauri ios init --ci
+          # Sense pods: el target ona_macOS del Podfile de Tauri fa fallar `pod install` a Builder.
+          rm src-tauri/gen/apple/Podfile
       - name: Commit de gen/apple
         if: steps.check.outputs.done != '1'
         run: |
