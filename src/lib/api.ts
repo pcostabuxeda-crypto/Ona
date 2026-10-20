@@ -104,8 +104,39 @@ export const mediaUpdate = (t: Track | undefined) =>
     cover: t?.album.image ?? null,
     durationMs: t?.duration_ms ?? null,
   }).catch(() => {});
-export const mediaState = (playing: boolean, positionMs: number) =>
-  invoke("media_state", { playing, positionMs: Math.max(0, Math.round(positionMs)) }).catch(() => {});
+export const mediaState = (playing: boolean, positionMs: number) => {
+  if (MOBILE) keepAwake(playing);
+  return invoke("media_state", { playing, positionMs: Math.max(0, Math.round(positionMs)) }).catch(() => {});
+};
+
+// shortcut: so silenciós a la vista mentre sona res, perquè iOS no adormi el JavaScript amb la
+// pantalla bloquejada (la cua avança aquí); si a l'iPhone es veu que no cal, treure-ho.
+let silence: HTMLAudioElement | null = null;
+function keepAwake(on: boolean) {
+  if (!silence) {
+    // 1 s de WAV en silenci (8 kHz, 8 bits, mono). No pot anar en mut: WebKit no ho comptaria com a so.
+    const n = 8000;
+    const b = new Uint8Array(44 + n).fill(128);
+    const v = new DataView(b.buffer);
+    const str = (o: number, s: string) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    str(0, "RIFF");
+    v.setUint32(4, 36 + n, true);
+    str(8, "WAVEfmt ");
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, n, true);
+    v.setUint32(28, n, true);
+    v.setUint16(32, 1, true);
+    v.setUint16(34, 8, true);
+    str(36, "data");
+    v.setUint32(40, n, true);
+    silence = new Audio(URL.createObjectURL(new Blob([b], { type: "audio/wav" })));
+    silence.loop = true;
+  }
+  if (on) silence.play().catch(() => {});
+  else silence.pause();
+}
 
 export const playerState = () =>
   invoke<{ uri: string; position_ms: number; playing: boolean } | null>("player_state");

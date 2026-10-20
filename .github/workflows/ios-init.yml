@@ -27,6 +27,11 @@ jobs:
           npx tauri ios init --ci
           # Sense pods: el target ona_macOS del Podfile de Tauri fa fallar `pod install` a Builder.
           rm src-tauri/gen/apple/Podfile
+          # Música amb la pantalla bloquejada, i la tornada de l'OAuth a 127.0.0.1 dins la vista.
+          /usr/libexec/PlistBuddy \
+            -c "Add :UIBackgroundModes array" -c "Add :UIBackgroundModes:0 string audio" \
+            -c "Add :NSAppTransportSecurity dict" -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" \
+            src-tauri/gen/apple/ona_iOS/Info.plist
       - name: Commit de gen/apple
         if: steps.check.outputs.done != '1'
         run: |

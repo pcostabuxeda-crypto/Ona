@@ -49,7 +49,7 @@
     ],
     "shortDescription": "Ona — música lleugera",
     "iOS": {
-      "frameworks": ["AudioToolbox", "AVFoundation"]
+      "frameworks": ["AudioToolbox", "AVFoundation", "MediaPlayer"]
     },
     "windows": {
       "nsis": {
