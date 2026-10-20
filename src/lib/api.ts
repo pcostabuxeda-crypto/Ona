@@ -35,12 +35,28 @@ const idOf = (uri: string) => uri.split(":").pop() ?? uri;
 
 const cache = new Map<string, { at: number; data: any }>();
 const TTL = 5 * 60_000;
+// Límits perquè la memòria no creixi amb la navegació (la queixa principal del client oficial).
+const MAX_CACHE = 150;
+const MAX_TRACKS = 20_000;
+
+/** Treu les entrades més antigues d'un Map (l'ordre d'inserció fa de LRU). */
+function trim<K, V>(map: Map<K, V>, max: number) {
+  for (const k of map.keys()) {
+    if (map.size <= max) break;
+    map.delete(k);
+  }
+}
 
 async function cached<T>(key: string, fresh: boolean, load: () => Promise<T>): Promise<T> {
   const hit = cache.get(key);
-  if (!fresh && hit && Date.now() - hit.at < TTL) return hit.data;
+  if (!fresh && hit && Date.now() - hit.at < TTL) {
+    cache.delete(key);
+    cache.set(key, hit); // ara és la més recent
+    return hit.data;
+  }
   const data = await load();
   cache.set(key, { at: Date.now(), data });
+  trim(cache, MAX_CACHE);
   return data;
 }
 
@@ -49,7 +65,9 @@ const trackCache = new Map<string, Track>();
 async function decorate(uris: string[]): Promise<Track[]> {
   const missing = [...new Set(uris.filter((u) => u.startsWith("spotify:track:") && !trackCache.has(u)))];
   if (missing.length) for (const t of await invoke<Track[]>("tracks", { uris: missing })) trackCache.set(t.uri, t);
-  return uris.map((u) => trackCache.get(u)).filter(Boolean) as Track[];
+  const out = uris.map((u) => trackCache.get(u)).filter(Boolean) as Track[];
+  trim(trackCache, MAX_TRACKS); // després de fer servir les d'ara
+  return out;
 }
 
 /** Portada de mosaic (4 àlbums diferents), com les playlists sense imatge pròpia del client. */
@@ -230,15 +248,23 @@ export async function artistAlbums(id: string): Promise<Collection[]> {
   return (await artistData(id)).albums;
 }
 
+/** M'agrada en memòria: es carrega un cop i s'actualitza en marcar (abans: tota la col·lecció per cançó). */
+let likedSet: Promise<Set<string>> | null = null;
+const liked = () => (likedSet ??= library("collection").then((l) => new Set(l.map((i) => i.uri))).catch((e) => ((likedSet = null), Promise.reject(e))));
+
 export async function isLiked(ids: string[]): Promise<boolean[]> {
   if (!ids.length) return [];
-  const liked = new Set((await library("collection")).map((i) => i.uri));
-  return ids.map((id) => liked.has(`spotify:track:${id}`));
+  const set = await liked();
+  return ids.map((id) => set.has(`spotify:track:${id}`));
 }
 
-export async function setLiked(id: string, liked: boolean) {
-  await invoke("collection_write", { set: "collection", uris: [`spotify:track:${id}`], remove: !liked });
+export async function setLiked(id: string, like: boolean) {
+  const uri = `spotify:track:${id}`;
+  await invoke("collection_write", { set: "collection", uris: [uri], remove: !like });
   cache.delete("collection:collection");
+  const set = await liked().catch(() => null);
+  if (like) set?.add(uri);
+  else set?.delete(uri);
 }
 
 export function fmtTime(ms: number) {
