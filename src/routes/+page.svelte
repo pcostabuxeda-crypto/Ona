@@ -129,7 +129,7 @@
   /** Dreceres amb Ctrl (també funcionen amb el focus en un botó). */
   const ctrlKeys: Record<string, () => void> = {
     l: () => player.current && ui.toggleLyrics(),
-    "shift+l": () => player.current && toggleMini(),
+    "shift+l": () => player.current && !A.MOBILE && toggleMini(),
     q: () => ui.togglePanel("queue"),
     s: () => document.querySelector<HTMLButtonElement>("footer .like")?.click(),
     "shift+s": () => player.toggleShuffle(),

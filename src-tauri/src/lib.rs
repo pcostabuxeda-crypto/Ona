@@ -6,6 +6,8 @@
 mod auth;
 mod local;
 mod lyrics;
+// Controls del sistema (souvlaki). A iOS falta MPRemoteCommandCenter: pas 5 del port.
+#[cfg(desktop)]
 mod media;
 mod meta;
 mod pb;
@@ -583,16 +585,18 @@ fn set_low_memory(window: &tauri::WebviewWindow, low: bool) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn,ona=info")).try_init();
-    tauri::Builder::default()
-        // Només una Ona oberta: si se n'obre una altra, es tanca i porta la primera al davant.
-        // (Ha d'anar primer de tot.)
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.unminimize();
-                let _ = w.show();
-                let _ = w.set_focus();
-            }
-        }))
+    // Només una Ona oberta: si se n'obre una altra, es tanca i porta la primera al davant.
+    // (Ha d'anar primer de tot.)
+    let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.unminimize();
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+    }));
+    builder
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
@@ -600,9 +604,12 @@ pub fn run() {
             let http = reqwest::Client::builder()
                 .user_agent(concat!("Ona/", env!("CARGO_PKG_VERSION"), " (https://github.com/)"))
                 .build()?;
-            let media = media::Media::default();
-            media.set(media::init(app.handle()));
-            app.manage(media);
+            #[cfg(desktop)]
+            {
+                let media = media::Media::default();
+                media.set(media::init(app.handle()));
+                app.manage(media);
+            }
             app.manage(Ona {
                 inner: Mutex::new(Inner::default()),
                 mixer: Arc::new(mixer),
@@ -634,7 +641,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            restore, login, logout, play, preload, resume, pause, seek, set_volume, player_state, media::media_update, media::media_state, tracks, albums, artists, album, artist, search, local_tracks, context, rootlist, playlist, collection, collection_write, me,
+            restore, login, logout, play, preload, resume, pause, seek, set_volume, player_state, #[cfg(desktop)] media::media_update, #[cfg(desktop)] media::media_state, tracks, albums, artists, album, artist, search, local_tracks, context, rootlist, playlist, collection, collection_write, me,
             get_lyrics
         ])
         .run(tauri::generate_context!())

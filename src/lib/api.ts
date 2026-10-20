@@ -134,14 +134,14 @@ const LIKED: Collection = { kind: "liked", id: "liked", name: "Cançons que m'ag
  * no hi ha les recomanacions personalitzades del client.
  */
 export async function home(free = false): Promise<{ shortcuts: Collection[]; sections: HomeSection[] }> {
-  if (free) return { shortcuts: [LOCAL, AUDIUS], sections: [] };
+  if (free) return { shortcuts: [...LOCALS, AUDIUS], sections: [] };
   const [playlists, artists, albums] = await Promise.all([
     myPlaylists(),
     followedArtists().catch(() => []),
     savedAlbums().catch(() => []),
   ]);
   return {
-    shortcuts: [LIKED, ...playlists.slice(0, 5), LOCAL, AUDIUS],
+    shortcuts: [LIKED, ...playlists.slice(0, 5), ...LOCALS, AUDIUS],
     sections: [
       { title: "Les teves playlists", items: playlists },
       { title: "Artistes que segueixes", items: artists },
@@ -211,6 +211,10 @@ const artistData = (id: string) =>
 
 export const AUDIUS: Collection = { kind: "audius", id: "trending", name: "Tendències a Audius", subtitle: "Música lliure i gratuïta" };
 export const LOCAL: Collection = { kind: "local", id: "music", name: "Fitxers locals", subtitle: "La carpeta Música" };
+/** iPhone/Android: sense finestres flotants ni carpeta Música. */
+export const MOBILE = typeof navigator !== "undefined" && /iPhone|iPad|Android/.test(navigator.userAgent);
+/** Fitxers locals només a l'escriptori. */
+export const LOCALS: Collection[] = MOBILE ? [] : [LOCAL];
 
 export async function loadCollection(kind: Collection["kind"], id: string): Promise<Loaded> {
   if (kind === "audius") return { info: AUDIUS, tracks: await audiusTrending() };

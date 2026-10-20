@@ -45,7 +45,7 @@
       { label: player.shuffle ? "Desactiva l'ordre aleatori" : "Ordre aleatori", icon: "shuffle", run: () => player.toggleShuffle() },
       { label: repeatLabel, icon: "repeat", run: () => player.cycleRepeat() },
       ...(t ? [{ label: "Lletra", icon: "lyrics", run: () => ui.toggleLyrics() }] : []),
-      ...(t ? [{ label: "Lletra flotant", icon: "note", run: () => toggleMini() }] : []),
+      ...(t && !A.MOBILE ? [{ label: "Lletra flotant", icon: "note", run: () => toggleMini() }] : []),
       { label: player.upNext.length ? `Cua (${player.upNext.length})` : "Cua", icon: "queue", run: () => ui.togglePanel("queue") },
       { label: "Ara sona", icon: "npv", run: () => ui.togglePanel("npv") },
       { label: player.volume ? "Silencia" : "Activa el so", icon: player.volume ? "mute" : "volume", run: toggleMute },
@@ -110,7 +110,7 @@
 
   <div class="right">
     <button class="ic" class:on={ui.view.name === "lyrics"} aria-pressed={ui.view.name === "lyrics"} onclick={() => ui.toggleLyrics()} title="Lletra (Ctrl L)" disabled={!t}><Icon name="lyrics" size={16} /></button>
-    <button class="ic" class:on={mini.open} aria-pressed={mini.open} onclick={() => toggleMini()} title="Lletra flotant (Ctrl Maj L)" disabled={!t}><Icon name="note" size={16} /></button>
+    {#if !A.MOBILE}<button class="ic" class:on={mini.open} aria-pressed={mini.open} onclick={() => toggleMini()} title="Lletra flotant (Ctrl Maj L)" disabled={!t}><Icon name="note" size={16} /></button>{/if}
     <button class="ic" class:on={ui.panel === "queue"} aria-pressed={ui.panel === "queue"} data-queue-btn onclick={() => ui.togglePanel("queue")} title="Cua (Ctrl Q)">
       <Icon name="queue" size={16} />{#if player.upNext.length}<b class="badge">{player.upNext.length}</b>{/if}
     </button>
