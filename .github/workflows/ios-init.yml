@@ -1,0 +1,35 @@
+# `tauri ios init` només funciona en macOS: aquest workflow genera src-tauri/gen/apple
+# en un runner macOS i el desa amb un commit a la mateixa branca (una sola vegada).
+name: iOS init
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/ios-init.yml]
+permissions:
+  contents: write
+jobs:
+  init:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ja inicialitzat?
+        id: check
+        run: test -d src-tauri/gen/apple && echo "done=1" >> "$GITHUB_OUTPUT" || true
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.done != '1'
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.check.outputs.done != '1'
+        run: |
+          npm ci
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+          npx tauri ios init --ci
+      - name: Commit de gen/apple
+        if: steps.check.outputs.done != '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/gen/apple
+          git commit -m "Genera el projecte d'Xcode de Tauri (tauri ios init)"
+          git push
