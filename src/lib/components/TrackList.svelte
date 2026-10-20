@@ -4,6 +4,7 @@
   import type { Track } from "$lib/api";
   import { fmtTime } from "$lib/api";
   import { player } from "$lib/player.svelte";
+  import { flyToQueue } from "$lib/fly";
   import { ui } from "$lib/ui.svelte";
   import Cover from "./Cover.svelte";
   import Icon from "./Icon.svelte";
@@ -68,30 +69,46 @@
     e.stopPropagation();
     if (id) ui.go({ name: "collection", kind: "album", id });
   }
+  /** La portada de la fila on hi ha l'element (per a l'animació de la cua). */
+  const coverOf = (el: EventTarget | null) => (el as HTMLElement | null)?.closest(".row")?.querySelector(".cover");
+
+  function queue(t: Track, from: EventTarget | null, next = false) {
+    if (next) player.playNext(t);
+    else player.addToQueue(t);
+    flyToQueue(coverOf(from));
+    ui.say(next ? `«${t.name}» sonarà a continuació` : `«${t.name}» afegida a la cua`);
+  }
   function addToQueue(e: MouseEvent, t: Track) {
     e.stopPropagation();
-    player.addToQueue(t);
-    ui.say(`«${t.name}» afegida a la cua`);
+    queue(t, e.currentTarget);
+  }
+
+  /** Teclat sobre una fila: Enter/espai reprodueix, Q l'afegeix a la cua, Maj+Q a continuació. */
+  function rowKey(e: KeyboardEvent, t: Track, n: number) {
+    if (e.target !== e.currentTarget) return; // no els enllaços ni botons de dins
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      e.stopPropagation();
+      player.playList(tracks, n, context);
+    } else if (e.key.toLowerCase() === "q" && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      queue(t, e.currentTarget, e.shiftKey);
+    }
   }
 
   function menu(e: MouseEvent, t: Track, n: number) {
+    const row = e.currentTarget;
     ui.openMenu(e, [
       { label: "Reprodueix", icon: "play", run: () => player.playList(tracks, n, context) },
       {
         label: "Reprodueix a continuació",
         icon: "playNextIcon",
-        run: () => {
-          player.playNext(t);
-          ui.say(`«${t.name}» sonarà a continuació`);
-        },
+        run: () => queue(t, row, true),
       },
       {
         label: "Afegeix a la cua",
         icon: "queueAdd",
-        run: () => {
-          player.addToQueue(t);
-          ui.say(`«${t.name}» afegida a la cua`);
-        },
+        run: () => queue(t, row),
       },
       ...(t.artists[0]?.id
         ? [{ label: "Ves a l'artista", icon: "artist", run: () => ui.go({ name: "collection", kind: "artist", id: t.artists[0].id }) }]
@@ -123,7 +140,8 @@
       role="button"
       tabindex="0"
       onclick={() => player.playList(tracks, n, context)}
-      onkeydown={(e) => e.key === "Enter" && player.playList(tracks, n, context)}
+      title="Enter: reprodueix · Q: afegeix a la cua · Maj Q: a continuació"
+      onkeydown={(e) => rowKey(e, t, n)}
       oncontextmenu={(e) => menu(e, t, n)}
     >
       <span class="idx">
@@ -150,7 +168,7 @@
         <span class="album"><a href="#album" onclick={(e) => openAlbum(e, t.album.id)}>{t.album.name}</a></span>
       {/if}
       <span class="actions">
-        <button title="Afegeix a la cua" onclick={(e) => addToQueue(e, t)}><Icon name="queueAdd" size={18} /></button>
+        <button title="Afegeix a la cua (Q)" aria-label="Afegeix «{t.name}» a la cua" onclick={(e) => addToQueue(e, t)}><Icon name="queueAdd" size={18} /></button>
       </span>
       <span class="dur">{fmtTime(t.duration_ms)}</span>
     </div>
@@ -277,7 +295,8 @@
     display: grid;
     place-items: center;
   }
-  .row:hover .actions button {
+  .row:hover .actions button,
+  .row:focus-within .actions button {
     opacity: 1;
   }
   .actions button:hover {

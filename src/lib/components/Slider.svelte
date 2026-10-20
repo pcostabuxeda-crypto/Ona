@@ -1,6 +1,6 @@
 <script lang="ts">
   /** Barra prima de Spotify: blanca, verda en passar-hi per sobre, amb el botó rodó visible només aleshores. */
-  let { value, onchange, label }: { value: number; onchange: (v: number) => void; label: string } = $props();
+  let { value, onchange, label, valueText }: { value: number; onchange: (v: number) => void; label: string; valueText?: string } = $props();
 
   let el: HTMLDivElement;
   let drag = $state<number | null>(null);
@@ -23,9 +23,12 @@
     drag = null;
   }
   function key(e: KeyboardEvent) {
+    // Amb Ctrl/Maj/Alt és una drecera global (cançó següent, avançar 5 s...): no fem res aquí.
+    if (e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return;
     const step = e.key === "ArrowRight" ? 0.05 : e.key === "ArrowLeft" ? -0.05 : 0;
     if (step) {
       e.preventDefault();
+      e.stopPropagation();
       onchange(Math.min(1, Math.max(0, shown + step)));
     }
   }
@@ -41,6 +44,7 @@
   aria-valuemin={0}
   aria-valuemax={100}
   aria-valuenow={Math.round(shown * 100)}
+  aria-valuetext={valueText}
   onpointerdown={down}
   onpointermove={move}
   onpointerup={up}

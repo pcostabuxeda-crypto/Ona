@@ -5,6 +5,7 @@
   import Cover from "./Cover.svelte";
   import Icon from "./Icon.svelte";
   import Slider from "./Slider.svelte";
+  import { mini, toggleMini } from "$lib/mini.svelte";
 
   let liked = $state(false);
   let lastVol = 0.7;
@@ -36,49 +37,84 @@
   }
 
   const t = $derived(player.current);
+  const repeatLabel = $derived({ off: "Repeteix: no", all: "Repeteix: tot", one: "Repeteix: aquesta cançó" }[player.repeat]);
+
+  /** Pantalla estreta: les accions secundàries van al menú ⋯. */
+  function more(e: MouseEvent) {
+    ui.openMenu(e, [
+      { label: player.shuffle ? "Desactiva l'ordre aleatori" : "Ordre aleatori", icon: "shuffle", run: () => player.toggleShuffle() },
+      { label: repeatLabel, icon: "repeat", run: () => player.cycleRepeat() },
+      ...(t ? [{ label: "Lletra", icon: "lyrics", run: () => ui.toggleLyrics() }] : []),
+      ...(t ? [{ label: "Lletra flotant", icon: "note", run: () => toggleMini() }] : []),
+      { label: player.upNext.length ? `Cua (${player.upNext.length})` : "Cua", icon: "queue", run: () => ui.togglePanel("queue") },
+      { label: "Ara sona", icon: "npv", run: () => ui.togglePanel("npv") },
+      { label: player.volume ? "Silencia" : "Activa el so", icon: player.volume ? "mute" : "volume", run: toggleMute },
+    ]);
+  }
 </script>
 
 <footer class="bar">
   <div class="now">
     {#if t}
-      <button class="cover" onclick={() => ui.togglePanel("npv")} title="Ara sona"><Cover src={t.album.thumb} size={56} radius={4} /></button>
+      <button class="cover" onclick={() => ui.togglePanel("npv")} title="Ara sona" aria-label="Ara sona: {t.name}" class:dim={!!player.error}>
+        <Cover src={t.album.thumb} size={56} radius={4} />
+      </button>
       <div class="txt">
         <a class="name" href="#album" onclick={(e) => (e.preventDefault(), t.album.id && ui.go({ name: "collection", kind: "album", id: t.album.id }))}>{t.name}</a>
-        <span class="artists">
-          {#each t.artists as a, j (a.id + j)}
-            {#if j > 0},&nbsp;{/if}<a href="#artist" onclick={(e) => (e.preventDefault(), a.id && ui.go({ name: "collection", kind: "artist", id: a.id }))}>{a.name}</a>
-          {/each}
+        <!-- Regió viva permanent: l'error de reproducció s'anuncia aquí mateix. -->
+        <span class="artists" aria-live="polite">
+          {#if player.error}
+            <span class="error">{player.error}</span>
+            <button class="link" onclick={() => player.retry()}>Torna-ho a provar</button>
+            <button class="link" onclick={() => player.next()}>Salta</button>
+          {:else}
+            {#each t.artists as a, j (a.id + j)}
+              {#if j > 0},&nbsp;{/if}<a href="#artist" onclick={(e) => (e.preventDefault(), a.id && ui.go({ name: "collection", kind: "artist", id: a.id }))}>{a.name}</a>
+            {/each}
+          {/if}
         </span>
       </div>
-      {#if !t.src}<button class="ic like" class:on={liked} onclick={toggleLike} title={liked ? "Treu de Cançons que m'agraden" : "Desa a Cançons que m'agraden"}>
-        <Icon name={liked ? "check" : "addCircle"} size={16} />
-      </button>{/if}
+      {#if !t.src}<button
+          class="ic like"
+          class:on={liked}
+          onclick={toggleLike}
+          aria-pressed={liked}
+          title={liked ? "Treu de Cançons que m'agraden (Ctrl S)" : "Desa a Cançons que m'agraden (Ctrl S)"}
+        >
+          <Icon name={liked ? "check" : "addCircle"} size={16} />
+        </button>{/if}
     {/if}
   </div>
 
   <div class="mid">
     <div class="controls">
-      <button class="ic" class:on={player.shuffle} onclick={() => player.toggleShuffle()} title="Ordre aleatori"><Icon name="shuffle" size={16} /></button>
-      <button class="ic" onclick={() => player.prev()} title="Anterior"><Icon name="prev" size={16} /></button>
-      <button class="play" onclick={() => player.toggle()} title={player.playing ? "Pausa" : "Reprodueix"} disabled={!t}>
+      <button class="ic wide" class:on={player.shuffle} aria-pressed={player.shuffle} onclick={() => player.toggleShuffle()} title="Ordre aleatori (Ctrl Maj S)"><Icon name="shuffle" size={16} /></button>
+      <button class="ic" onclick={() => player.prev()} title="Anterior (Ctrl ←)"><Icon name="prev" size={16} /></button>
+      <button class="play" class:loading={player.loading} onclick={() => player.toggle()} title={player.playing ? "Pausa (espai)" : "Reprodueix (espai)"} disabled={!t}>
         <Icon name={player.playing ? "pause" : "play"} size={16} />
       </button>
-      <button class="ic" onclick={() => player.next()} title="Següent"><Icon name="next" size={16} /></button>
-      <button class="ic" class:on={player.repeat !== "off"} onclick={() => player.cycleRepeat()} title="Repeteix">
+      <button class="ic" onclick={() => player.next()} title="Següent (Ctrl →)"><Icon name="next" size={16} /></button>
+      <button class="ic wide" class:on={player.repeat !== "off"} aria-pressed={player.repeat !== "off"} aria-label={repeatLabel} onclick={() => player.cycleRepeat()} title="{repeatLabel} (Ctrl R)">
         <Icon name="repeat" size={16} />{#if player.repeat === "one"}<i class="one">1</i>{/if}
+      </button>
+      <button class="ic narrow-only" data-queue-btn onclick={more} title="Més opcions" aria-label="Més opcions" aria-haspopup="menu">
+        <Icon name="more" size={18} />{#if player.upNext.length}<b class="badge">{player.upNext.length}</b>{/if}
       </button>
     </div>
     <div class="time">
       <span>{A.fmtTime(player.positionMs)}</span>
-      <Slider value={player.progress} onchange={(v) => t && player.seekTo(v * t.duration_ms)} label="Progrés" />
+      <Slider value={player.progress} onchange={(v) => t && player.seekTo(v * t.duration_ms)} label="Progrés" valueText="{A.fmtTime(player.positionMs)} de {A.fmtTime(t?.duration_ms ?? 0)}" />
       <span>{A.fmtTime(t?.duration_ms ?? 0)}</span>
     </div>
   </div>
 
   <div class="right">
-    <button class="ic" class:on={ui.view.name === "lyrics"} onclick={() => ui.toggleLyrics()} title="Lletra" disabled={!t}><Icon name="lyrics" size={16} /></button>
-    <button class="ic" class:on={ui.panel === "queue"} onclick={() => ui.togglePanel("queue")} title="Cua"><Icon name="queue" size={16} /></button>
-    <button class="ic" class:on={ui.panel === "npv"} onclick={() => ui.togglePanel("npv")} title="Vista Ara sona"><Icon name="npv" size={16} /></button>
+    <button class="ic" class:on={ui.view.name === "lyrics"} aria-pressed={ui.view.name === "lyrics"} onclick={() => ui.toggleLyrics()} title="Lletra (Ctrl L)" disabled={!t}><Icon name="lyrics" size={16} /></button>
+    <button class="ic" class:on={mini.open} aria-pressed={mini.open} onclick={() => toggleMini()} title="Lletra flotant (Ctrl Maj L)" disabled={!t}><Icon name="note" size={16} /></button>
+    <button class="ic" class:on={ui.panel === "queue"} aria-pressed={ui.panel === "queue"} data-queue-btn onclick={() => ui.togglePanel("queue")} title="Cua (Ctrl Q)">
+      <Icon name="queue" size={16} />{#if player.upNext.length}<b class="badge">{player.upNext.length}</b>{/if}
+    </button>
+    <button class="ic" class:on={ui.panel === "npv"} aria-pressed={ui.panel === "npv"} onclick={() => ui.togglePanel("npv")} title="Vista Ara sona"><Icon name="npv" size={16} /></button>
     <button class="ic" onclick={toggleMute} title={player.volume ? "Silencia" : "Activa el so"}><Icon name={player.volume ? "volume" : "mute"} size={16} /></button>
     <div class="vol"><Slider value={player.volume} onchange={(v) => player.setVolume(v)} label="Volum" /></div>
   </div>
@@ -178,6 +214,7 @@
     gap: 8px;
   }
   .play {
+    position: relative;
     width: 32px;
     height: 32px;
     margin: 0 8px;
@@ -213,6 +250,104 @@
     align-items: center;
     justify-content: flex-end;
     gap: 4px;
+  }
+  .badge {
+    position: absolute;
+    top: 0;
+    right: -2px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #000;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 15px;
+    text-align: center;
+  }
+  .narrow-only {
+    display: none;
+  }
+  .cover {
+    transition: opacity var(--t-quick);
+  }
+  .cover.dim {
+    opacity: 0.5;
+  }
+  .error {
+    display: inline-block;
+    color: var(--error);
+    animation: err-in var(--t-spring) var(--spring-soft) both;
+  }
+  @keyframes err-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+  .link {
+    margin-left: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+    text-decoration: underline;
+  }
+  /* Mentre carrega: un anell que gira al voltant del play (només en aquest estat). */
+  .play.loading::before {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(1turn);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .play.loading::before {
+      animation: none;
+      border-color: var(--accent);
+      opacity: 0.5;
+    }
+  }
+
+  /* Pantalla estreta (608 px): dues files; la barra de temps a tota l'amplada i la resta al menú ⋯. */
+  @media (max-width: 720px) {
+    .bar {
+      height: auto;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-rows: auto auto;
+      row-gap: 2px;
+      padding: 6px 12px 8px;
+    }
+    .mid {
+      display: contents;
+    }
+    .controls {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .time {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      max-width: none;
+    }
+    .right,
+    .wide {
+      display: none;
+    }
+    .narrow-only {
+      display: grid;
+    }
+    .play {
+      margin: 0 4px;
+    }
   }
   .vol {
     width: 93px;

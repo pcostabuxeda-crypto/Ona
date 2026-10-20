@@ -19,6 +19,7 @@ class Ui {
   /** Text del cercador de la barra de dalt. */
   query = $state("");
   toast = $state<string | null>(null);
+  toastAction = $state<{ label: string; run: () => void } | null>(null);
   /** Menú contextual obert (clic dret). */
   menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   user = $state<{ name: string; image?: string } | null>(null);
@@ -60,10 +61,15 @@ class Ui {
     this.menu = { x: e.clientX, y: e.clientY, items };
   }
 
-  say(msg: string) {
+  /** Avís breu; amb `action` (p. ex. «Desfés») dura 5 s. */
+  say(msg: string, action?: { label: string; run: () => void }) {
     this.toast = msg;
+    this.toastAction = action ?? null;
     clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => (this.toast = null), 3200);
+    this.toastTimer = setTimeout(() => {
+      this.toast = null;
+      this.toastAction = null;
+    }, action ? 5000 : 3200);
   }
 }
 
