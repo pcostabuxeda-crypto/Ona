@@ -16,7 +16,19 @@
   --radius: 8px;
   --font: SpotifyMixUI, "Helvetica Neue", Helvetica, Arial, "Segoe UI", sans-serif;
   --font-title: SpotifyMixUITitle, SpotifyMixUI, "Helvetica Neue", Helvetica, Arial, "Segoe UI", sans-serif;
+  --error: #f3727f;
+  /* Moviment (Material 3 Expressive, com l'Ona 0.1): entrar amb molla, sortir de pressa i sense rebot. */
+  --spring: linear(0, 0.013 0.6%, 0.05 1.2%, 0.2 2.6%, 0.711 7.2%, 0.919 9.6%, 1.054 12.2%, 1.106 14%, 1.124 15.7%, 1.117 17.6%, 1.057 22.4%, 1.016 26.6%, 0.995 32.4%, 0.996 42.3%, 1);
+  --spring-soft: linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 20%, 1.039 22.7%, 1.042 25.4%, 1.026 31.5%, 1.004 40.6%, 0.998 51.9%, 1);
+  --t-spring: 520ms;
+  --t-quick: 180ms;
   color-scheme: dark;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-spring: 1ms;
+    --t-quick: 1ms;
+  }
 }
 /* Estètica tipus Liner (preferència «liner»): negre neutre, panells més rodons, accents blancs. */
 .app.liner {

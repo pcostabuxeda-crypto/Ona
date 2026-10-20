@@ -203,4 +203,50 @@
     font-size: 24px;
     margin-bottom: 16px;
   }
+
+  /* Contingut estret (pantalla vertical de 608 px): capçalera apilada. */
+  @container (max-width: 560px) {
+    .head {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 32px 16px 16px;
+    }
+    .head :global(.cover),
+    .liked {
+      width: 160px !important;
+      height: 160px !important;
+    }
+    h1,
+    h1.long {
+      font-size: clamp(28px, 8vw, 48px);
+      text-wrap: balance;
+      overflow-wrap: normal;
+    }
+    .body {
+      padding: 0 16px 32px;
+    }
+    /* En fer scroll, la portada s'encongeix i s'esvaeix (ho fa el compositor, sense JS). */
+    @supports (animation-timeline: scroll()) {
+      .head :global(.cover),
+      .liked {
+        transform-origin: left bottom;
+        animation: shrink linear both;
+        animation-timeline: scroll(nearest);
+        animation-range: 0 220px;
+      }
+    }
+  }
+  @keyframes shrink {
+    to {
+      transform: scale(0.8);
+      opacity: 0.4;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .head :global(.cover),
+    .liked {
+      animation: none !important;
+    }
+  }
 </style>

@@ -227,6 +227,7 @@
     width: 100%;
   }
   .stacked .scroll {
-    top: 200px;
+    /* Per sota de la columna apilada (portada de 96 px, temps i controls), perquè no tapi la lletra. */
+    top: 264px;
   }
 </style>

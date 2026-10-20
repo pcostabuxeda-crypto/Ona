@@ -49,6 +49,9 @@ const AUDIO_CACHE_BYTES: u64 = 512 * 1024 * 1024;
 
 type Res<T> = Result<T, String>;
 
+/// Error que la interfície reconeix: credencials desades que Spotify ja no accepta.
+const SESSION_EXPIRED: &str = "session_expired";
+
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
@@ -77,6 +80,10 @@ struct Ona {
 }
 
 impl Ona {
+    fn forget_credentials(&self) {
+        let _ = std::fs::remove_file(self.data_dir.join("auth").join("credentials.json"));
+    }
+
     fn cache(&self) -> Res<Cache> {
         Cache::new(
             Some(self.data_dir.join("auth")),
@@ -90,7 +97,14 @@ impl Ona {
     /// Obre una sessió nova i la connecta al reproductor (que es crea el primer cop).
     async fn start(&self, app: &AppHandle, creds: Credentials) -> Res<String> {
         let session = Session::new(SessionConfig::default(), Some(self.cache()?));
-        session.connect(creds, true).await.map_err(err)?;
+        // Credencials rebutjades (caducades o revocades): la interfície ho diu i torna a demanar l'inici de sessió.
+        session.connect(creds, true).await.map_err(|e| {
+            if e.kind == librespot::core::error::ErrorKind::PermissionDenied {
+                SESSION_EXPIRED.to_string()
+            } else {
+                err(e)
+            }
+        })?;
         let user = session.username();
 
         let mut inner = self.inner.lock().await;
@@ -237,7 +251,11 @@ async fn restore(app: AppHandle, ona: State<'_, Ona>) -> Res<Option<String>> {
     let Some(creds) = ona.cache()?.credentials() else {
         return Ok(None);
     };
-    ona.start(&app, creds).await.map(Some)
+    let r = ona.start(&app, creds).await;
+    if matches!(&r, Err(e) if e == SESSION_EXPIRED) {
+        ona.forget_credentials();
+    }
+    r.map(Some)
 }
 
 /// OAuth al navegador. Cancel·la qualsevol intent anterior que encara esperi.
@@ -267,13 +285,15 @@ async fn browser_oauth(app: &AppHandle, ona: &Ona, client_id: String) -> Res<aut
 /// Inicia sessió amb el compte de Spotify (librespot, client oficial) al navegador.
 #[tauri::command]
 async fn login(app: AppHandle, ona: State<'_, Ona>) -> Res<String> {
-    match ona.cache()?.credentials() {
-        Some(creds) => ona.start(&app, creds).await,
-        None => {
-            let token = browser_oauth(&app, &ona, SessionConfig::default().client_id).await?;
-            ona.start(&app, Credentials::with_access_token(token.access)).await
+    if let Some(creds) = ona.cache()?.credentials() {
+        match ona.start(&app, creds).await {
+            // Si Spotify les rebutja, s'esborren i es torna al navegador (abans l'usuari quedava encallat).
+            Err(e) if e == SESSION_EXPIRED => ona.forget_credentials(),
+            r => return r,
         }
     }
+    let token = browser_oauth(&app, &ona, SessionConfig::default().client_id).await?;
+    ona.start(&app, Credentials::with_access_token(token.access)).await
 }
 
 #[tauri::command]
@@ -285,7 +305,7 @@ async fn logout(ona: State<'_, Ona>) -> Res<()> {
     if let Some(session) = inner.session.take() {
         session.shutdown();
     }
-    let _ = std::fs::remove_file(ona.data_dir.join("auth").join("credentials.json"));
+    ona.forget_credentials();
     Ok(())
 }
 
