@@ -59,7 +59,7 @@
       {#if top}
         <div class="best-wrap">
           <h2>Resultat principal</h2>
-          <div class="best" role="button" tabindex="0" onclick={open} onkeydown={(e) => e.key === "Enter" && open()}>
+          <div class="best" role="button" tabindex="0" onclick={open} onkeydown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open())}>
             <Cover src={top.image} size={92} radius={6} round={top.kind === "artist"} />
             <h3>{top.name}</h3>
             <span class="muted"><span class="kind">{top.kind === "artist" ? "Artista" : top.kind === "album" ? "Àlbum" : "Playlist"}</span></span>

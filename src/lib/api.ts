@@ -81,7 +81,10 @@ function mosaic(tracks: Track[]): string | undefined {
 
 export const restore = () => invoke<string | null>("restore");
 export const login = () => invoke<string>("login");
-export const logout = () => invoke("logout");
+export const logout = () => {
+  likedSet = null; // un altre compte tindrà uns altres M'agrada
+  return invoke("logout");
+};
 export const me = () => cached("me", false, () => invoke<any>("me"));
 
 // ---------- Reproductor ----------
@@ -250,7 +253,17 @@ export async function artistAlbums(id: string): Promise<Collection[]> {
 
 /** M'agrada en memòria: es carrega un cop i s'actualitza en marcar (abans: tota la col·lecció per cançó). */
 let likedSet: Promise<Set<string>> | null = null;
-const liked = () => (likedSet ??= library("collection").then((l) => new Set(l.map((i) => i.uri))).catch((e) => ((likedSet = null), Promise.reject(e))));
+let likedAt = 0;
+/** Es recarrega com a molt cada 5 min (per veure els M'agrada fets des del mòbil), no a cada cançó. */
+function liked() {
+  if (!likedSet || Date.now() - likedAt > TTL) {
+    likedAt = Date.now();
+    likedSet = library("collection", true)
+      .then((l) => new Set(l.map((i) => i.uri)))
+      .catch((e) => ((likedSet = null), Promise.reject(e)));
+  }
+  return likedSet;
+}
 
 export async function isLiked(ids: string[]): Promise<boolean[]> {
   if (!ids.length) return [];

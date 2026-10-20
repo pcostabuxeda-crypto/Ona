@@ -30,6 +30,7 @@
 
   /** Arrencada lenta: després de 8 s es diu què passa i es pot continuar sense Spotify. */
   let slow = $state(false);
+  let expired = false;
 
   onMount(async () => {
     if (isMini) return;
@@ -41,9 +42,10 @@
       if (user) return enter();
     } catch (e) {
       error = loginError(e);
+      expired = String(e).includes("session_expired");
     }
     clearTimeout(slowTimer);
-    if (freeSaved()) return enterFree();
+    if (freeSaved() && !expired) return enterFree();
     phase = "login";
   });
 
@@ -51,6 +53,7 @@
   function loginError(e: unknown) {
     const m = String(e);
     if (m.includes("session_expired")) return "La sessió ha caducat. Torna a iniciar sessió amb Spotify.";
+    if (m.includes("Premium account required")) return "Cal un compte de Spotify Premium per reproduir. Sense, pots continuar amb Audius i els teus fitxers.";
     if (m.includes("port 5588")) return "Una altra app fa servir el port 5588. Tanca-la i torna-ho a provar.";
     if (m.includes("temps d'espera")) return "El navegador no ha respost a temps. Torna-ho a provar.";
     return `No s'ha pogut entrar (${m}). Comprova la connexió i torna-ho a provar.`;
@@ -108,8 +111,8 @@
   }
 
   async function doLogout() {
+    player.forget(); // abans de tancar la sessió: la pausa encara funciona i la cua ja no serviria
     if (!ui.free) await A.logout();
-    player.forget(); // la cua de Spotify ja no es podria reproduir
     setFree(false);
     phase = "login";
   }

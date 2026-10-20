@@ -15,13 +15,15 @@
   type ListId = "user" | "ctx";
   const H = 58; // alçada de cada fila (px)
 
+  type Row = { track: Track; key: Track | number };
   let drag = $state<{ list: ListId; from: number; startY: number; dy: number; pointer: number } | null>(null);
   /** Durant un fotograma després de deixar anar, sense transicions (evita el salt). */
   let settling = $state(false);
 
-  const rows = $derived({
-    user: player.upNext.map((track, i) => ({ track, key: `u${i}:${track.uri}` })),
-    ctx: player.upcoming.map((u) => ({ track: u.track, key: `c${u.key}` })),
+  // Claus estables: l'objecte de cada element de la cua de l'usuari (n'hi ha un per afegit) i l'índex del context.
+  const rows = $derived<Record<ListId, Row[]>>({
+    user: player.upNext.map((track) => ({ track, key: track })),
+    ctx: player.upcoming.map((u) => ({ track: u.track, key: u.key })),
   });
   const over = $derived(drag ? Math.max(0, Math.min(rows[drag.list].length - 1, drag.from + Math.round(drag.dy / H))) : -1);
 
@@ -88,7 +90,7 @@
   }
 </script>
 
-{#snippet list(id: ListId, items: { track: Track; key: string }[])}
+{#snippet list(id: ListId, items: Row[])}
   <div class="list" class:dragging={drag?.list === id} class:settling>
     {#each items as u, j (u.key)}
       <div

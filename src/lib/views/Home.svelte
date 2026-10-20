@@ -43,7 +43,7 @@
   {#if shortcuts.length}
     <div class="shortcuts">
       {#each shortcuts as c (c.kind + c.id)}
-        <div class="sc" role="button" tabindex="0" onclick={() => open(c)} onkeydown={(e) => e.key === "Enter" && open(c)}>
+        <div class="sc" role="button" tabindex="0" onclick={() => open(c)} onkeydown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open(c))}>
           {#if TILES[c.kind]}
             <span class="liked" style:background={TILES[c.kind]?.bg}><Icon name={TILES[c.kind]?.icon ?? ""} size={20} /></span>
           {:else}

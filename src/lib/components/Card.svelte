@@ -24,7 +24,7 @@
   }
 </script>
 
-<div class="card" role="button" tabindex="0" onclick={open} onkeydown={(e) => e.key === "Enter" && open()}>
+<div class="card" role="button" tabindex="0" onclick={open} onkeydown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open())}>
   <div class="art">
     {#if TILES[item.kind]}
       <div class="liked" style:background={TILES[item.kind]?.bg}><Icon name={TILES[item.kind]?.icon ?? ""} size={48} /></div>

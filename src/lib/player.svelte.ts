@@ -97,7 +97,12 @@ class PlayerState {
     const a = this.audio;
     if (a.src !== src) a.src = src;
     a.currentTime = ms / 1000;
-    a.play().catch(() => this.skipUnavailable());
+    a.play().catch((e) => this.playFailed(e));
+  }
+
+  /** play() també falla amb AbortError quan un altre src l'interromp (saltar ràpid): això no és un error. */
+  private playFailed(e: unknown) {
+    if ((e as Error)?.name !== "AbortError") this.skipUnavailable();
   }
 
   /** Les ordres al reproductor de Rust: si fallen, l'usuari ho ha de veure (abans es perdien). */
@@ -321,14 +326,14 @@ class PlayerState {
   /** Al davant de la cua de l'usuari: sona just després de l'actual. */
   playNext(t: Track) {
     if (!this.current) return this.playList([t]);
-    this.upNext = [t, ...this.upNext];
+    this.upNext = [{ ...t }, ...this.upNext];
     this.touch();
   }
 
   /** Al final de la cua de l'usuari (però abans que la resta del context). */
   addToQueue(t: Track) {
     if (!this.current) return this.playList([t]);
-    this.upNext = [...this.upNext, t];
+    this.upNext = [...this.upNext, { ...t }];
     this.touch();
   }
 
@@ -466,7 +471,7 @@ class PlayerState {
     if (!this.current) return;
     if (this.current.src) {
       if (this.playing) this.audio.pause();
-      else if (this.audio.src === this.current.src) this.audio.play().catch(() => this.skipUnavailable());
+      else if (this.audio.src === this.current.src) this.audio.play().catch((e) => this.playFailed(e));
       else this.playWeb(this.current.src, this.positionMs);
     } else if (this.playing) {
       this.setBase(this.positionMs, false);

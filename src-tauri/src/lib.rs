@@ -99,7 +99,7 @@ impl Ona {
         let session = Session::new(SessionConfig::default(), Some(self.cache()?));
         // Credencials rebutjades (caducades o revocades): la interfície ho diu i torna a demanar l'inici de sessió.
         session.connect(creds, true).await.map_err(|e| {
-            if e.kind == librespot::core::error::ErrorKind::PermissionDenied {
+            if e.kind == librespot::core::error::ErrorKind::PermissionDenied && e.to_string().contains("credentials") {
                 SESSION_EXPIRED.to_string()
             } else {
                 err(e)
@@ -614,6 +614,12 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // Tancar la finestra principal tanca l'app: si no, la lletra flotant la mantindria viva sense finestra.
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if window.label() == "main" {
+                    window.app_handle().exit(0);
+                }
+            }
             if let tauri::WindowEvent::Resized(_) = event {
                 #[cfg(windows)]
                 {
