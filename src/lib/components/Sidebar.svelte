@@ -8,6 +8,8 @@
   import { ui } from "$lib/ui.svelte";
   import Cover from "./Cover.svelte";
   import Icon from "./Icon.svelte";
+  import { tick } from "svelte";
+  import { matches } from "$lib/fuzzy";
 
   let { collapsed = false }: { collapsed?: boolean } = $props();
 
@@ -18,6 +20,8 @@
   let albums = $state<Collection[]>([]);
   let filter = $state<"" | "playlist" | "artist" | "album">("");
   let wide = $state(false);
+  let query = $state("");
+  let search = $state<HTMLInputElement>();
 
   $effect(() => {
     if (ui.free) return;
@@ -33,7 +37,7 @@
 
   // Fitxers locals i Audius hi són sempre (no depenen del compte de Spotify).
   const own = $derived(ui.free ? [A.LOCAL, A.AUDIUS] : [LIKED, A.LOCAL, A.AUDIUS]);
-  const items = $derived(
+  const all = $derived(
     filter === "playlist"
       ? [...own, ...playlists]
       : filter === "artist"
@@ -42,12 +46,26 @@
           ? albums
           : [...own, ...playlists, ...artists, ...albums],
   );
+  // Tolerant a accents i a un error per paraula (queixa d'Apple Music: cal l'ortografia exacta).
+  const items = $derived(query.trim() ? all.filter((c) => matches(query, `${c.name} ${c.subtitle}`)) : all);
+
+  /** Ctrl+F: cerca a la biblioteca (desplega la barra si està plegada). */
+  async function find(e: KeyboardEvent) {
+    if (!(e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f")) return;
+    e.preventDefault();
+    wide = true;
+    await tick();
+    search?.focus();
+    search?.select();
+  }
   const small = $derived(collapsed && !wide);
 
   const isOpen = (c: Collection) => ui.view.name === "collection" && ui.view.kind === c.kind && ui.view.id === c.id;
   const isPlaying = (c: Collection) => player.playing && player.context === c.name;
   const open = (c: Collection) => ui.go({ name: "collection", kind: c.kind, id: c.id });
 </script>
+
+<svelte:window onkeydown={find} />
 
 <nav class="lib panelbox" class:small>
   <header>
@@ -63,6 +81,20 @@
         <button class="chip" class:on={filter === k} onclick={() => (filter = filter === k ? "" : k)}>{label}</button>
       {/each}
     </div>
+    <label class="find">
+      <Icon name="search" size={16} />
+      <input
+        bind:this={search}
+        bind:value={query}
+        type="search"
+        placeholder="Cerca a la biblioteca (Ctrl F)"
+        aria-label="Cerca a la biblioteca"
+        autocomplete="off"
+        spellcheck="false"
+        onkeydown={(e) => e.key === "Escape" && ((query = ""), search?.blur())}
+      />
+    </label>
+    {#if query.trim() && !items.length}<p class="none">Cap resultat per «{query.trim()}».</p>{/if}
   {/if}
 
   <ul>
@@ -125,6 +157,35 @@
     gap: 8px;
     padding: 0 16px 8px;
     overflow: hidden;
+  }
+  .find {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 16px 8px;
+    padding: 0 10px;
+    height: 32px;
+    border-radius: 4px;
+    background: var(--highlight);
+    color: var(--text-2);
+  }
+  .find:focus-within {
+    box-shadow: inset 0 0 0 1px var(--text-2);
+    color: var(--text);
+  }
+  .find input {
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: 0;
+    outline: 0;
+    color: var(--text);
+    font: inherit;
+  }
+  .none {
+    margin: 4px 16px 8px;
+    font-size: 13px;
+    color: var(--text-2);
   }
   ul {
     list-style: none;

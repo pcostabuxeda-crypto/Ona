@@ -11,6 +11,29 @@ const SESSION_KEY = "ona.session";
 /** La posició va a part: es desa sovint i és petita (la cua només quan canvia). */
 const POS_KEY = "ona.pos";
 const MAX_SAVED = 3000;
+const BAK_KEY = "ona.session.bak";
+
+function read(key: string) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function write(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {}
+}
+/** Una sessió desada només val si es pot llegir i és coherent. */
+function valid(raw: string | null): Saved | null {
+  try {
+    const s = JSON.parse(raw ?? "null") as Saved | null;
+    return s?.queue?.length && s.order?.length && s.pos >= 0 && s.pos < s.order.length ? s : null;
+  } catch {
+    return null;
+  }
+}
 
 type Saved = {
   queue: Track[];
@@ -62,6 +85,7 @@ class PlayerState {
   /** La cua ha canviat i s'ha de tornar a desar. */
   private dirty = false;
   private inited = false;
+  private warnedSave = false;
 
   private get audio() {
     if (this.audioEl) return this.audioEl;
@@ -229,18 +253,26 @@ class PlayerState {
     };
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify(data));
-    } catch {}
+    } catch {
+      // Abans es perdia en silenci; ara l'usuari ho sap (un cop).
+      if (!this.warnedSave) ui.say("No s'ha pogut desar la cua: és massa gran per a la memòria de l'app.");
+      this.warnedSave = true;
+    }
   }
 
   /** En arrencar: recupera la cua desada i, si Rust encara està sonant, la posició real. */
   private async restoreSession() {
-    let saved: Saved | null = null;
     let savedPos: { uri: string; positionMs: number } | null = null;
     try {
-      saved = JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null");
       savedPos = JSON.parse(localStorage.getItem(POS_KEY) ?? "null");
     } catch {}
-    if (saved?.queue?.length && saved.order?.length && saved.pos >= 0 && saved.pos < saved.order.length) {
+    // La cua és de l'usuari: si la sessió està malmesa es recupera de la còpia (queixa d'Apple Music:
+    // playlists i baixades que desapareixen). Una sessió bona refà la còpia.
+    const raw = read(SESSION_KEY);
+    let saved = valid(raw);
+    if (saved) write(BAK_KEY, raw!);
+    else if ((saved = valid(read(BAK_KEY)))) this.dirty = true; // reescriu la malmesa al proper desat
+    if (saved) {
       this.queue = saved.queue;
       this.order = saved.order;
       this.pos = saved.pos;
@@ -287,6 +319,7 @@ class PlayerState {
     this.inBackend = "";
     try {
       localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(BAK_KEY);
       localStorage.removeItem(POS_KEY);
     } catch {}
   }
