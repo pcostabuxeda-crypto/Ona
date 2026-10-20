@@ -1,51 +1,28 @@
-/** Preferències visuals, desades al navegador de l'app (localStorage). */
-export type VizStyle = "normal" | "circular";
-export type VizShape = "bars" | "wave";
-import type { Effect, ThemeId } from "./themes";
-
+/** Preferències desades al navegador de l'app (localStorage). */
 const KEY = "ona.settings";
 
-const DEFAULTS = {
-  vizEnabled: true,
-  vizStyle: "circular" as VizStyle,
-  vizShape: "bars" as VizShape,
-  /** 0.5 – 2 */
-  vizSensitivity: 1.2,
-  liveBg: true,
-  /** 0 – 1 (desenfocament de la portada de fons) */
-  bgBlur: 0.7,
-  /** 0 – 1 (quant reacciona el fons al ritme) */
-  bgReactivity: 0.6,
-  theme: "ona" as ThemeId,
-  effect: "none" as Effect,
-  /** 0.15 – 0.9: opacitat dels panells quan hi ha un tema amb fons. */
-  panelAlpha: 0.45,
-  /** 0 – 0.8: enfosquiment del fons del tema. */
-  bgDim: 0.2,
-  /** Mode estalvi: sense visualitzador, fons viu, efectes ni ona a la barra. */
-  eco: false,
+type Settings = {
+  /** Mode lleuger: lletra simple per línies i fons de color pla (sense WebGL ni animació per síl·laba). */
+  light: boolean;
+  /** Estètica tipus Liner: interfície fosca i neutra, barra d'icones i lletra a pantalla completa. */
+  liner: boolean;
 };
-
-type Settings = typeof DEFAULTS;
 
 function load(): Settings {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") };
+    // Només els camps d'ara: la clau la compartia l'Ona 0.1 (temes, visualitzador...).
+    const s = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    return { light: s.light === true, liner: s.liner === true };
   } catch {
-    return { ...DEFAULTS };
+    return { light: false, liner: false };
   }
 }
 
 export const settings = $state<Settings>(load());
 
-/** Desa automàticament quan canvia qualsevol preferència. */
-export function persistSettings() {
-  $effect.root(() => {
-    $effect(() => {
-      const snapshot = JSON.stringify(settings);
-      try {
-        localStorage.setItem(KEY, snapshot);
-      } catch {}
-    });
-  });
+export function setSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
+  settings[key] = value;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(settings));
+  } catch {}
 }

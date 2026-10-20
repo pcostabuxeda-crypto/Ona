@@ -1,99 +1,121 @@
 <script lang="ts">
+  /** Inici amb el format del client: dreceres i prestatges (fets amb la teva biblioteca). */
   import * as A from "$lib/api";
-  import type { Collection, Track } from "$lib/api";
+  import type { Collection, HomeSection } from "$lib/api";
+  import { paletteFrom } from "$lib/color";
   import Card from "$lib/components/Card.svelte";
   import Cover from "$lib/components/Cover.svelte";
-  import TrackList from "$lib/components/TrackList.svelte";
+  import Icon from "$lib/components/Icon.svelte";
+  import { covers } from "$lib/covers.svelte";
+  import { TILES } from "$lib/tiles";
   import { player } from "$lib/player.svelte";
   import { ui } from "$lib/ui.svelte";
 
-  let { scroller }: { scroller?: HTMLElement } = $props();
-
-  let recent = $state<Track[]>([]);
-  let top = $state<Track[]>([]);
-  let playlists = $state<Collection[]>([]);
-  let albums = $state<Collection[]>([]);
-
-  const hour = new Date().getHours();
-  const greeting = hour < 6 ? "Bona nit" : hour < 14 ? "Bon dia" : hour < 21 ? "Bona tarda" : "Bona nit";
+  let shortcuts = $state<Collection[]>([]);
+  let sections = $state<HomeSection[]>([]);
+  let failed = $state(false);
+  let tint = $state("#333");
 
   $effect(() => {
-    A.recentTracks().then((r) => (recent = r)).catch(() => {});
-    A.topTracks().then((r) => (top = r)).catch(() => {});
-    A.myPlaylists().then((r) => (playlists = r)).catch(() => {});
-    A.savedAlbums().then((r) => (albums = r)).catch(() => {});
+    A.home(ui.free)
+      .then((h) => {
+        shortcuts = h.shortcuts;
+        sections = h.sections;
+        paletteFrom(h.shortcuts.find((c) => c.image)?.image).then((p) => (tint = p.a));
+        if (!ui.free) A.fillCovers(h.sections[0]?.items ?? []);
+      })
+      .catch(() => (failed = true));
   });
 
-  const quick = $derived(recent.slice(0, 8));
+  const open = (c: Collection) => ui.go({ name: "collection", kind: c.kind, id: c.id });
+  async function play(e: MouseEvent, c: Collection) {
+    e.stopPropagation();
+    const d = await A.loadCollection(c.kind, c.id).catch(() => null);
+    if (d) player.playList(d.tracks, 0, d.info.name);
+  }
 </script>
 
-<section class="page">
-  <h1 class="hello">{greeting}{ui.user ? `, ${ui.user}` : ""}</h1>
+<section class="page home" style:--tint={tint}>
+  {#if failed}
+    <p class="muted">No s'ha pogut carregar l'inici.</p>
+  {/if}
 
-  {#if quick.length}
-    <div class="quick">
-      {#each quick as t, i (t.id)}
-        <button class="q" style:--d="{i * 40}ms" onclick={() => player.playList(recent, i, "Escoltat fa poc")}>
-          <Cover src={t.album.thumb} size={56} radius={0} />
-          <span>{t.name}</span>
-        </button>
+  {#if shortcuts.length}
+    <div class="shortcuts">
+      {#each shortcuts as c (c.kind + c.id)}
+        <div class="sc" role="button" tabindex="0" onclick={() => open(c)} onkeydown={(e) => e.key === "Enter" && open(c)}>
+          {#if TILES[c.kind]}
+            <span class="liked" style:background={TILES[c.kind]?.bg}><Icon name={TILES[c.kind]?.icon ?? ""} size={20} /></span>
+          {:else}
+            <Cover src={c.image ?? covers[c.id]} size={56} radius={0} round={c.kind === "artist"} />
+          {/if}
+          <span>{c.name}</span>
+          <button class="play-fab" onclick={(e) => play(e, c)} title="Reprodueix"><Icon name="play" size={20} /></button>
+        </div>
       {/each}
     </div>
   {/if}
 
-  {#if playlists.length}
-    <h2>Les teves playlists</h2>
-    <div class="grid">
-      <Card item={{ kind: "liked", id: "liked", name: "M'agrada", subtitle: "Cançons desades" }} />
-      {#each playlists.slice(0, 11) as p, i (p.id)}<Card item={p} index={i + 1} />{/each}
+  {#each sections as s (s.title)}
+    <div class="shelf-title"><h2>{s.title}</h2></div>
+    <div class="shelf">
+      {#each s.items as item (item.kind + item.id)}<Card {item} />{/each}
     </div>
-  {/if}
-
-  {#if top.length}
-    <h2>El teu mes, en bucle</h2>
-    <TrackList tracks={top.slice(0, 10)} context="Les més escoltades" />
-  {/if}
-
-  {#if albums.length}
-    <h2>Àlbums desats</h2>
-    <div class="grid">
-      {#each albums as a, i (a.id)}<Card item={a} index={i} />{/each}
-    </div>
-  {/if}
+  {/each}
 </section>
 
 <style>
-  .hello {
-    font-size: 40px;
-    margin: 8px 0 24px;
+  .home {
+    background: linear-gradient(color-mix(in srgb, var(--tint) 45%, var(--base)), var(--base) 320px);
+    min-height: 100%;
+    box-sizing: border-box;
   }
-  .quick {
+  .shortcuts {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 10px;
-    margin-bottom: 36px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+    gap: 8px;
+    margin: 8px 0 16px;
   }
-  .q {
+  .sc {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 14px;
-    border-radius: 10px;
+    gap: 8px;
+    height: 56px;
+    border-radius: 4px;
     overflow: hidden;
-    background: rgb(255 255 255 / 0.07);
-    text-align: left;
-    font-weight: 600;
-    color: var(--text);
+    background: var(--tinted);
+    font-weight: 700;
+    cursor: pointer;
     transition: background 0.2s;
-    animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-    animation-delay: var(--d);
   }
-  .q span {
-    white-space: nowrap;
+  .sc:hover {
+    background: var(--tinted-hi);
+  }
+  .liked {
+    width: 56px;
+    height: 56px;
+    flex: none;
+    display: grid;
+    place-items: center;
+  }
+  .sc > span:not(.liked) {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
-    padding-right: 12px;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    padding-right: 48px;
   }
-  .q:hover {
-    background: rgb(255 255 255 / 0.14);
+  .sc .play-fab {
+    position: absolute;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    opacity: 0;
+  }
+  .sc:hover .play-fab {
+    opacity: 1;
   }
 </style>

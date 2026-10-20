@@ -45,21 +45,21 @@
   }
 </script>
 
-<aside class="queue">
+<aside class="panel queue">
   <header>
     <h3>Cua</h3>
     <div class="hactions">
       {#if n}
         <button class="clear" onclick={() => player.clearUpcoming()}>Buida</button>
       {/if}
-      <button class="x" onclick={() => (ui.queueOpen = false)} title="Tanca"><Icon name="close" size={18} /></button>
+      <button class="x" onclick={() => (ui.panel = null)} title="Tanca"><Icon name="close" size={18} /></button>
     </div>
   </header>
 
   {#if player.current}
     <span class="label">Ara sona</span>
     <div class="item now">
-      <Cover src={player.current.album.thumb} size={44} radius={8} />
+      <Cover src={player.current.album.thumb} size={48} radius={4} />
       <span class="txt">
         <b>{player.current.name}</b>
         <small>{player.current.artists.map((a) => a.name).join(", ")}</small>
@@ -69,7 +69,7 @@
 
   {#if n}
     <span class="label">
-      Següents{player.context ? ` · ${player.context}` : ""}
+      Següent{player.context ? `: ${player.context}` : ""}
       <em>{player.upcomingTotal}</em>
     </span>
     <div class="list" class:dragging={!!drag} class:settling>
@@ -94,7 +94,7 @@
             <Icon name="grip" size={16} />
           </span>
           <button class="item" onclick={() => !drag && player.jumpTo(u.at)}>
-            <Cover src={u.track.album.thumb} size={44} radius={8} />
+            <Cover src={u.track.album.thumb} size={48} radius={4} />
             <span class="txt">
               <b>{u.track.name}</b>
               <small>{u.track.artists.map((a) => a.name).join(", ")}</small>
@@ -117,22 +117,11 @@
 
 <style>
   .queue {
-    width: 340px;
-    flex: none;
-    margin: 0 10px 0 0;
-    padding: 16px 10px;
-    border-radius: 22px;
-    background: var(--panel);
-    border: 1px solid var(--panel-line);
+    padding: 16px 8px;
+    border-radius: var(--radius);
+    background: var(--base);
     overflow-y: auto;
     overflow-x: hidden;
-    animation: slide 0.45s var(--spring-soft) both;
-  }
-  @keyframes slide {
-    from {
-      opacity: 0;
-      transform: translateX(28px);
-    }
   }
   header {
     display: flex;
@@ -151,14 +140,11 @@
     font-size: 12px;
     font-weight: 600;
     color: var(--text-2);
-    background: rgb(255 255 255 / 0.07);
-    transition:
-      background 0.2s,
-      color 0.2s;
+    background: var(--tinted);
   }
   .clear:hover {
     color: var(--text);
-    background: rgb(255 255 255 / 0.13);
+    background: var(--tinted-hi);
   }
   .x {
     color: var(--text-2);
@@ -168,17 +154,16 @@
     color: var(--text);
   }
   h3 {
-    margin: 0;
-    font-size: 18px;
+    font-size: 16px;
   }
   .label {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 14px 8px 6px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-2);
+    padding: 16px 8px 8px;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -197,22 +182,19 @@
     display: grid;
     grid-template-columns: 22px 1fr 30px;
     align-items: center;
-    border-radius: 12px;
-    transition:
-      transform 0.28s var(--spring-soft),
-      background 0.15s,
-      box-shadow 0.2s;
+    border-radius: 6px;
+    transition: transform 0.2s ease;
   }
   .settling .row {
     transition: none;
   }
   .row:hover {
-    background: rgb(255 255 255 / 0.05);
+    background: var(--highlight);
   }
   .row.lifted {
     z-index: 5;
     transition: none;
-    background: #24212f;
+    background: var(--elevated-hi);
     box-shadow: 0 14px 30px -10px rgb(0 0 0 / 0.8);
     scale: 1.03;
   }
@@ -266,12 +248,13 @@
     text-overflow: ellipsis;
   }
   b {
-    font-weight: 550;
+    font-weight: 400;
+    font-size: 16px;
     color: var(--text);
   }
   small {
     color: var(--text-2);
-    font-size: 12px;
+    font-size: 14px;
   }
   .dur {
     color: var(--text-3);
@@ -288,10 +271,7 @@
     border-radius: 50%;
     color: var(--text-2);
     opacity: 0;
-    transition:
-      opacity 0.15s,
-      background 0.15s,
-      transform 0.3s var(--spring);
+    transition: opacity 0.15s;
   }
   .row:hover .remove {
     opacity: 1;

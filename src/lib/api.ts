@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { covers } from "./covers.svelte";
+import { audiusTrending, localTracks } from "./sources";
 
 export type Artist = { id: string; name: string };
 export type Track = {
@@ -9,9 +11,11 @@ export type Track = {
   album: { id: string; name: string; image?: string; thumb?: string };
   duration_ms: number;
   explicit: boolean;
+  /** Pistes que no són de Spotify (Audius, fitxers locals): URL que reprodueix l'<audio> de la interfície. */
+  src?: string;
 };
 export type Collection = {
-  kind: "playlist" | "album" | "liked" | "artist";
+  kind: "playlist" | "album" | "liked" | "artist" | "audius" | "local";
   id: string;
   name: string;
   subtitle: string;
@@ -19,78 +23,40 @@ export type Collection = {
   total?: number;
 };
 export type LyricLine = { t: number; text: string };
-export type Lyrics = { synced: boolean; source: string; lines: LyricLine[] } | null;
+export type Lyrics = { synced: boolean; source: string; lines: LyricLine[]; ttml?: string } | null;
+export type HomeSection = { title: string; items: Collection[] };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-function pickImage(images: any[] | undefined, target: number) {
-  if (!images?.length) return undefined;
-  const sorted = [...images].sort((a, b) => (a.width ?? 0) - (b.width ?? 0));
-  return (sorted.find((i) => (i.width ?? 640) >= target) ?? sorted[sorted.length - 1]).url;
-}
+// Les dades venen dels endpoints spclient que fa servir el client d'escriptori de Spotify
+// (metadades protobuf per lots, playlist4, col·lecció, context-resolve), via la sessió de librespot.
 
-export function toTrack(t: any, album?: any): Track | null {
-  if (!t || !t.id || t.type === "episode") return null;
-  const al = t.album ?? album ?? {};
-  return {
-    id: t.id,
-    uri: t.uri,
-    name: t.name,
-    artists: (t.artists ?? []).map((a: any) => ({ id: a.id, name: a.name })),
-    album: {
-      id: al.id,
-      name: al.name,
-      image: pickImage(al.images, 600),
-      thumb: pickImage(al.images, 64),
-    },
-    duration_ms: t.duration_ms,
-    explicit: !!t.explicit,
-  };
-}
-
-function toCollection(x: any, kind: Collection["kind"]): Collection {
-  return {
-    kind,
-    id: x.id,
-    name: x.name,
-    subtitle:
-      kind === "playlist"
-        ? (x.owner?.display_name ?? "Playlist")
-        : kind === "album"
-          ? (x.artists ?? []).map((a: any) => a.name).join(", ")
-          : "Artista",
-    image: pickImage(x.images, 300),
-    total: x.items?.total ?? x.tracks?.total ?? x.total_tracks,
-  };
-}
-
-// ---------- Crides crues ----------
+const idOf = (uri: string) => uri.split(":").pop() ?? uri;
 
 const cache = new Map<string, { at: number; data: any }>();
 const TTL = 5 * 60_000;
 
-export async function api<T = any>(path: string, opts: { method?: string; body?: unknown; fresh?: boolean } = {}): Promise<T> {
-  const method = opts.method ?? "GET";
-  if (method === "GET" && !opts.fresh) {
-    const hit = cache.get(path);
-    if (hit && Date.now() - hit.at < TTL) return hit.data;
-  }
-  const data = await invoke<T>("api", { path, method, body: opts.body ?? null });
-  if (method === "GET") cache.set(path, { at: Date.now(), data });
-  else cache.clear();
+async function cached<T>(key: string, fresh: boolean, load: () => Promise<T>): Promise<T> {
+  const hit = cache.get(key);
+  if (!fresh && hit && Date.now() - hit.at < TTL) return hit.data;
+  const data = await load();
+  cache.set(key, { at: Date.now(), data });
   return data;
 }
 
-/** Segueix la paginació (`next`) fins a `max` elements. */
-async function paged(path: string, max = 2000): Promise<any[]> {
-  const items: any[] = [];
-  let next: string | null = path;
-  while (next && items.length < max) {
-    const page: any = await api(next);
-    items.push(...(page.items ?? []));
-    next = page.next ? new URL(page.next).pathname + new URL(page.next).search : null;
-  }
-  return items;
+/** Nom, artistes, àlbum i durada de cada pista (una crida per lot, com el client). */
+const trackCache = new Map<string, Track>();
+async function decorate(uris: string[]): Promise<Track[]> {
+  const missing = [...new Set(uris.filter((u) => u.startsWith("spotify:track:") && !trackCache.has(u)))];
+  if (missing.length) for (const t of await invoke<Track[]>("tracks", { uris: missing })) trackCache.set(t.uri, t);
+  return uris.map((u) => trackCache.get(u)).filter(Boolean) as Track[];
+}
+
+/** Portada de mosaic (4 àlbums diferents), com les playlists sense imatge pròpia del client. */
+function mosaic(tracks: Track[]): string | undefined {
+  const ids = [...new Set(tracks.map((t) => t.album.image?.split("/").pop()).filter(Boolean))];
+  if (ids.length >= 4) return `https://mosaic.scdn.co/300/${ids.slice(0, 4).join("")}`;
+  return tracks[0]?.album.image;
 }
 
 // ---------- Compte ----------
@@ -98,9 +64,7 @@ async function paged(path: string, max = 2000): Promise<any[]> {
 export const restore = () => invoke<string | null>("restore");
 export const login = () => invoke<string>("login");
 export const logout = () => invoke("logout");
-export const getClientId = () => invoke<string | null>("get_client_id");
-export const setClientId = (clientId: string) => invoke("set_client_id", { clientId });
-export const me = () => api("/v1/me");
+export const me = () => cached("me", false, () => invoke<any>("me"));
 
 // ---------- Reproductor ----------
 
@@ -126,105 +90,155 @@ export const playerState = () =>
   invoke<{ uri: string; position_ms: number; playing: boolean } | null>("player_state");
 
 export async function trackByUri(uri: string): Promise<Track | null> {
-  const id = uri.split(":").pop();
-  return id ? toTrack(await api(`/v1/tracks/${id}`)) : null;
+  return (await decorate([uri]))[0] ?? null;
 }
 
-export const getLyrics = (t: Track) =>
+/** `syllables`: demanar també la lletra per síl·laba (Better Lyrics); el mode lleuger no la fa servir. */
+export const getLyrics = (t: Track, syllables = true) =>
   invoke<Lyrics>("get_lyrics", {
     id: t.id,
     title: t.name,
     artist: t.artists[0]?.name ?? "",
     album: t.album.name ?? "",
     durationMs: t.duration_ms,
+    syllables,
   });
 
 // ---------- Contingut ----------
 
-export async function search(q: string) {
-  const r = await api(`/v1/search?q=${encodeURIComponent(q)}&type=track,artist,album,playlist&limit=10`);
+const LIKED: Collection = { kind: "liked", id: "liked", name: "Cançons que m'agraden", subtitle: "Playlist" };
+
+/**
+ * Inici fet amb la teva biblioteca: sense la consulta GraphQL "home" (pathfinder no és accessible),
+ * no hi ha les recomanacions personalitzades del client.
+ */
+export async function home(free = false): Promise<{ shortcuts: Collection[]; sections: HomeSection[] }> {
+  if (free) return { shortcuts: [LOCAL, AUDIUS], sections: [] };
+  const [playlists, artists, albums] = await Promise.all([
+    myPlaylists(),
+    followedArtists().catch(() => []),
+    savedAlbums().catch(() => []),
+  ]);
   return {
-    tracks: (r.tracks?.items ?? []).map((t: any) => toTrack(t)).filter(Boolean) as Track[],
-    artists: (r.artists?.items ?? []).filter(Boolean).map((a: any) => ({
-      ...toCollection(a, "artist"),
-      image: pickImage(a.images, 300),
-    })) as Collection[],
-    albums: (r.albums?.items ?? []).filter(Boolean).map((a: any) => toCollection(a, "album")) as Collection[],
-    playlists: (r.playlists?.items ?? []).filter(Boolean).map((p: any) => toCollection(p, "playlist")) as Collection[],
+    shortcuts: [LIKED, ...playlists.slice(0, 5), LOCAL, AUDIUS],
+    sections: [
+      { title: "Les teves playlists", items: playlists },
+      { title: "Artistes que segueixes", items: artists },
+      { title: "Àlbums desats", items: albums },
+    ].filter((s) => s.items.length),
   };
 }
 
+/** Cerca de cançons; els artistes i àlbums surten de les cançons trobades. */
+export async function search(q: string) {
+  const tracks = await cached(`search:${q}`, false, () => invoke<Track[]>("search", { q }));
+  for (const t of tracks) trackCache.set(t.uri, t);
+  const uniq = (xs: string[]) => [...new Set(xs.filter((x) => x && !x.endsWith(":")))].slice(0, 10);
+  const [artists, albums] = await Promise.all([
+    invoke<Collection[]>("artists", { uris: uniq(tracks.flatMap((t) => t.artists.map((a) => `spotify:artist:${a.id}`))) }).catch(() => []),
+    invoke<Collection[]>("albums", { uris: uniq(tracks.map((t) => `spotify:album:${t.album.id}`)) }).catch(() => []),
+  ]);
+  return { tracks, artists, albums, playlists: [] as Collection[] };
+}
+
 export async function myPlaylists(): Promise<Collection[]> {
-  const items = await paged("/v1/me/playlists?limit=50", 500);
-  return items.filter(Boolean).map((p) => toCollection(p, "playlist"));
+  return cached("rootlist", false, async () => {
+    const [list, user] = await Promise.all([invoke<any[]>("rootlist"), me().catch(() => null)]);
+    const mine = user?.uri?.split(":").pop();
+    return list.map((p) => ({
+      kind: "playlist" as const,
+      id: idOf(p.uri),
+      name: p.name,
+      subtitle: `Playlist · ${p.owner === mine ? user.name : p.owner}`,
+      image: p.image ?? undefined,
+      total: p.total,
+    }));
+  });
 }
 
-export async function topTracks(): Promise<Track[]> {
-  const r = await api("/v1/me/top/tracks?limit=20&time_range=short_term");
-  return (r.items ?? []).map((t: any) => toTrack(t)).filter(Boolean);
+/** Portades que falten (mosaics): es calculen amb les primeres pistes de cada playlist. */
+const pendingCovers = new Set<string>();
+export async function fillCovers(list: Collection[]) {
+  for (const p of list.filter((p) => p.kind === "playlist" && !p.image && !pendingCovers.has(p.id))) {
+    pendingCovers.add(p.id);
+    try {
+      const d = await invoke<any>("playlist", { id: p.id });
+      const img = mosaic(await decorate(d.uris.slice(0, 12)));
+      if (img) covers[p.id] = img;
+    } catch {}
+  }
 }
 
-export async function recentTracks(): Promise<Track[]> {
-  const r = await api("/v1/me/player/recently-played?limit=30");
-  const seen = new Set<string>();
-  return (r.items ?? [])
-    .map((i: any) => toTrack(i.track))
-    .filter((t: Track | null) => t && !seen.has(t.id) && seen.add(t.id));
-}
+/** URIs desades a la biblioteca: M'agrada i àlbums ("collection"), artistes ("artist"). */
+const library = (set: "collection" | "artist", fresh = false) =>
+  cached(`collection:${set}`, fresh, () => invoke<{ uri: string; added_at: number }[]>("collection", { set }));
 
 export async function savedAlbums(): Promise<Collection[]> {
-  const r = await api("/v1/me/albums?limit=20");
-  return (r.items ?? []).map((i: any) => toCollection(i.album, "album"));
+  const uris = (await library("collection")).map((i) => i.uri).filter((u) => u.startsWith("spotify:album:"));
+  return uris.length ? invoke<Collection[]>("albums", { uris: uris.slice(0, 100) }) : [];
+}
+
+export async function followedArtists(): Promise<Collection[]> {
+  const uris = (await library("artist")).map((i) => i.uri);
+  return uris.length ? invoke<Collection[]>("artists", { uris: uris.slice(0, 100) }) : [];
 }
 
 export type Loaded = { info: Collection; tracks: Track[] };
 
+const artistData = (id: string) =>
+  cached(`artist:${id}`, false, () => invoke<{ info: Collection; top: Track[]; albums: Collection[] }>("artist", { id }));
+
+export const AUDIUS: Collection = { kind: "audius", id: "trending", name: "Tendències a Audius", subtitle: "Música lliure i gratuïta" };
+export const LOCAL: Collection = { kind: "local", id: "music", name: "Fitxers locals", subtitle: "La carpeta Música" };
+
 export async function loadCollection(kind: Collection["kind"], id: string): Promise<Loaded> {
+  if (kind === "audius") return { info: AUDIUS, tracks: await audiusTrending() };
+  if (kind === "local") {
+    const tracks = await localTracks(true);
+    return { info: { ...LOCAL, total: tracks.length }, tracks };
+  }
   if (kind === "liked") {
-    const items = await paged("/v1/me/tracks?limit=50", 5000);
-    const tracks = items.map((i) => toTrack(i.track)).filter(Boolean) as Track[];
-    return { info: { kind, id, name: "M'agrada", subtitle: "La teva música", total: tracks.length }, tracks };
+    const uris = (await library("collection", true)).map((i) => i.uri).filter((u) => u.startsWith("spotify:track:"));
+    const tracks = await decorate(uris);
+    return { info: { ...LIKED, total: tracks.length }, tracks };
   }
   if (kind === "album") {
-    const a = await api(`/v1/albums/${id}`);
-    const tracks = (a.tracks?.items ?? []).map((t: any) => toTrack(t, a)).filter(Boolean);
-    return { info: toCollection(a, "album"), tracks };
+    const a = await cached(`album:${id}`, false, () => invoke<Loaded>("album", { id }));
+    return { info: { ...a.info, subtitle: `Àlbum · ${a.info.subtitle}` }, tracks: a.tracks };
   }
   if (kind === "artist") {
-    // L'API ja no dona les "populars" d'un artista: es busquen les seves cançons.
-    const a = await api(`/v1/artists/${id}`);
-    const r = await api(`/v1/search?q=${encodeURIComponent(`artist:"${a.name}"`)}&type=track&limit=10`);
-    return {
-      info: { ...toCollection(a, "artist"), image: pickImage(a.images, 600), subtitle: "Artista" },
-      tracks: (r.tracks?.items ?? [])
-        .filter((t: any) => t?.artists?.some((x: any) => x.id === id))
-        .map((t: any) => toTrack(t))
-        .filter(Boolean),
-    };
+    const a = await artistData(id);
+    return { info: a.info, tracks: a.top };
   }
-  const [p, items] = await Promise.all([
-    api(`/v1/playlists/${id}?fields=id,name,images,owner(display_name),items(total)`),
-    paged(`/v1/playlists/${id}/items?limit=50`, 5000),
-  ]);
+  const p = await invoke<any>("playlist", { id });
+  const tracks = await decorate(p.uris);
+  const mine = (await me().catch(() => null)) as any;
   return {
-    info: toCollection(p, "playlist"),
-    tracks: items.map((i) => toTrack(i.item ?? i.track)).filter(Boolean) as Track[],
+    info: {
+      kind,
+      id,
+      name: p.name,
+      subtitle: `Playlist · ${mine?.uri?.endsWith(`:${p.owner}`) ? mine.name : p.owner}`,
+      image: p.image ?? mosaic(tracks),
+      total: p.uris.length,
+    },
+    tracks,
   };
 }
 
 export async function artistAlbums(id: string): Promise<Collection[]> {
-  const r = await api(`/v1/artists/${id}/albums?include_groups=album,single&limit=20`);
-  return (r.items ?? []).map((a: any) => toCollection(a, "album"));
+  return (await artistData(id)).albums;
 }
 
 export async function isLiked(ids: string[]): Promise<boolean[]> {
   if (!ids.length) return [];
-  const uris = ids.map((id) => `spotify:track:${id}`).join(",");
-  return api(`/v1/me/library/contains?uris=${uris}`, { fresh: true });
+  const liked = new Set((await library("collection")).map((i) => i.uri));
+  return ids.map((id) => liked.has(`spotify:track:${id}`));
 }
 
 export async function setLiked(id: string, liked: boolean) {
-  await api(`/v1/me/library?uris=spotify:track:${id}`, { method: liked ? "PUT" : "DELETE" });
+  await invoke("collection_write", { set: "collection", uris: [`spotify:track:${id}`], remove: !liked });
+  cache.delete("collection:collection");
 }
 
 export function fmtTime(ms: number) {

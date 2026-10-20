@@ -1,7 +1,36 @@
 //! Lletres en un format únic per a la interfície:
-//! `{ synced: bool, source: String, lines: [{ t: ms, text }] }`
+//! `{ synced: bool, source: String, lines: [{ t: ms, text }], ttml?: String }`
+//! (`ttml` porta temps per síl·laba i el parseja la interfície amb @braccato/parsers).
 
 use serde_json::{json, Value};
+
+/// API pública i gratuïta de Better Lyrics (https://docs.betterlyrics.org): TTML amb temps per síl·laba.
+pub async fn from_betterlyrics(
+    http: &reqwest::Client,
+    title: &str,
+    artist: &str,
+    album: &str,
+    duration_ms: u32,
+) -> Option<Value> {
+    let duration = (duration_ms / 1000).to_string();
+    let data: Value = http
+        .get("https://api.betterlyrics.org/getLyrics")
+        .query(&[("s", title), ("a", artist), ("al", album), ("d", duration.as_str())])
+        .timeout(std::time::Duration::from_secs(6))
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    let ttml = data.get("ttml")?.as_str()?.trim();
+    if !ttml.contains("<p") {
+        return None;
+    }
+    Some(json!({ "synced": true, "source": "Better Lyrics", "lines": [], "ttml": ttml }))
+}
 
 /// Resposta de `color-lyrics/v2` de Spotify.
 pub fn from_spotify(bytes: &[u8]) -> Option<Value> {

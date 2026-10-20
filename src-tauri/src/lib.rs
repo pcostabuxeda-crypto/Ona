@@ -1,10 +1,14 @@
 //! Ona: client de Spotify lleuger. Aquí viu tot el que no és interfície:
-//! sessió de Spotify (librespot), reproductor, proxy de la Web API i lletres.
+//! sessió de Spotify (librespot), reproductor, endpoints interns de Spotify i lletres.
+//! Les dades venen dels endpoints spclient que fa servir el client d'escriptori (metadades
+//! protobuf, playlist4, col·lecció, context-resolve) amb la sessió de librespot: no cal cap Client ID propi.
 
 mod auth;
+mod local;
 mod lyrics;
 mod media;
-mod viz;
+mod meta;
+mod pb;
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -53,18 +57,6 @@ fn err(e: impl std::fmt::Display) -> String {
 struct Inner {
     session: Option<Session>,
     player: Option<Arc<Player>>,
-    web: Option<WebToken>,
-}
-
-/// Token OAuth per a la Web API. Va amb el client ID propi de l'usuari:
-/// el de librespot (keymaster) el comparteix tothom i Spotify el té sempre limitat (429).
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-struct WebToken {
-    client_id: String,
-    access: String,
-    refresh: String,
-    /// Segons UNIX en què caduca.
-    expires: u64,
 }
 
 fn unix_now() -> u64 {
@@ -81,7 +73,6 @@ struct Ona {
     http: reqwest::Client,
     /// Inici de sessió en curs al navegador; un de nou cancel·la l'anterior (i allibera el port).
     pending_login: std::sync::Mutex<Option<tokio::task::AbortHandle>>,
-    viz: Arc<viz::VizShared>,
     now: SharedNow,
 }
 
@@ -94,52 +85,6 @@ impl Ona {
             Some(AUDIO_CACHE_BYTES),
         )
         .map_err(err)
-    }
-
-    fn client_id_path(&self) -> PathBuf {
-        self.data_dir.join("client_id.txt")
-    }
-
-    fn client_id(&self) -> Option<String> {
-        let id = std::fs::read_to_string(self.client_id_path()).ok()?;
-        let id = id.trim().to_string();
-        (!id.is_empty()).then_some(id)
-    }
-
-    fn token_path(&self) -> PathBuf {
-        self.data_dir.join("auth").join("web.json")
-    }
-
-    fn save_web(&self, t: &WebToken) {
-        if let Ok(json) = serde_json::to_string(t) {
-            let _ = std::fs::write(self.token_path(), json);
-        }
-    }
-
-    fn load_web(&self) -> Option<WebToken> {
-        serde_json::from_str(&std::fs::read_to_string(self.token_path()).ok()?).ok()
-    }
-
-    /// Token vàlid per a la Web API; el renova si queda menys d'un minut.
-    async fn web_token(&self) -> Res<String> {
-        let cached = self.inner.lock().await.web.clone().or_else(|| self.load_web());
-        let mut t = cached.ok_or("not_logged_in")?;
-        if t.expires > unix_now() + 60 {
-            self.inner.lock().await.web = Some(t.clone());
-            return Ok(t.access);
-        }
-        let fresh = auth::refresh(&self.http, &t.client_id, &t.refresh)
-            .await
-            .map_err(|e| {
-                log::warn!("refresh: {e}");
-                "not_logged_in".to_string()
-            })?;
-        t.access = fresh.access;
-        t.refresh = fresh.refresh;
-        t.expires = unix_now() + fresh.expires_in;
-        self.save_web(&t);
-        self.inner.lock().await.web = Some(t.clone());
-        Ok(t.access)
     }
 
     /// Obre una sessió nova i la connecta al reproductor (que es crea el primer cop).
@@ -168,18 +113,9 @@ impl Ona {
             ..PlayerConfig::default()
         };
         let backend = audio_backend::find(None).ok_or("No hi ha cap sortida d'àudio")?;
-        let shared = self.viz.clone();
-        Ok(Player::new(
-            config,
-            session,
-            self.mixer.get_soft_volume(),
-            move || {
-                Box::new(viz::VizSink {
-                    inner: backend(None, AudioFormat::default()),
-                    shared,
-                })
-            },
-        ))
+        Ok(Player::new(config, session, self.mixer.get_soft_volume(), move || {
+            backend(None, AudioFormat::default())
+        }))
     }
 
     /// Retorna una sessió vàlida, reconnectant amb les credencials desades si s'ha caigut.
@@ -301,10 +237,6 @@ async fn restore(app: AppHandle, ona: State<'_, Ona>) -> Res<Option<String>> {
     let Some(creds) = ona.cache()?.credentials() else {
         return Ok(None);
     };
-    let web_id = ona.client_id();
-    if web_id.is_none() || ona.load_web().map(|t| Some(t.client_id)) != Some(web_id) {
-        return Ok(None);
-    }
     ona.start(&app, creds).await.map(Some)
 }
 
@@ -332,49 +264,16 @@ async fn browser_oauth(app: &AppHandle, ona: &Ona, client_id: String) -> Res<aut
     }
 }
 
-/// Inicia sessió en dos passos (cadascun només si cal):
-/// 1. reproducció: librespot amb el client de Spotify;
-/// 2. Web API: el client ID propi de l'usuari.
+/// Inicia sessió amb el compte de Spotify (librespot, client oficial) al navegador.
 #[tauri::command]
 async fn login(app: AppHandle, ona: State<'_, Ona>) -> Res<String> {
-    let web_id = ona.client_id().ok_or("no_client_id")?;
-
-    let user = match ona.cache()?.credentials() {
-        Some(creds) => ona.start(&app, creds).await?,
+    match ona.cache()?.credentials() {
+        Some(creds) => ona.start(&app, creds).await,
         None => {
             let token = browser_oauth(&app, &ona, SessionConfig::default().client_id).await?;
-            ona.start(&app, Credentials::with_access_token(token.access))
-                .await?
+            ona.start(&app, Credentials::with_access_token(token.access)).await
         }
-    };
-
-    if ona.load_web().filter(|t| t.client_id == web_id).is_none() {
-        let token = browser_oauth(&app, &ona, web_id.clone()).await?;
-        let web = WebToken {
-            client_id: web_id,
-            access: token.access,
-            refresh: token.refresh,
-            expires: unix_now() + token.expires_in,
-        };
-        ona.save_web(&web);
-        ona.inner.lock().await.web = Some(web);
     }
-    Ok(user)
-}
-
-#[tauri::command]
-fn get_client_id(ona: State<'_, Ona>) -> Option<String> {
-    ona.client_id()
-}
-
-#[tauri::command]
-fn set_client_id(ona: State<'_, Ona>, client_id: String) -> Res<()> {
-    let id = client_id.trim();
-    if id.len() != 32 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("El Client ID són 32 caràcters (lletres a-f i números).".into());
-    }
-    std::fs::create_dir_all(&ona.data_dir).map_err(err)?;
-    std::fs::write(ona.client_id_path(), id).map_err(err)
 }
 
 #[tauri::command]
@@ -386,9 +285,7 @@ async fn logout(ona: State<'_, Ona>) -> Res<()> {
     if let Some(session) = inner.session.take() {
         session.shutdown();
     }
-    inner.web = None;
     let _ = std::fs::remove_file(ona.data_dir.join("auth").join("credentials.json"));
-    let _ = std::fs::remove_file(ona.token_path());
     Ok(())
 }
 
@@ -433,57 +330,181 @@ fn set_volume(ona: State<'_, Ona>, volume: f64) {
         .set_volume((volume.clamp(0.0, 1.0) * u16::MAX as f64) as u16);
 }
 
-/// Activa o atura l'anàlisi d'espectre (només es fa mentre la interfície la mostra).
+// ---------- Endpoints interns i lletres ----------
+
+/// Pistes (nom, artistes, àlbum, portada, durada) per a una llista d'URIs, per lots.
 #[tauri::command]
-fn set_viz(ona: State<'_, Ona>, enabled: bool) {
-    ona.viz
-        .enabled
-        .store(enabled, std::sync::atomic::Ordering::Relaxed);
+async fn tracks(app: AppHandle, ona: State<'_, Ona>, uris: Vec<String>) -> Res<Value> {
+    meta::tracks(&ona.session(&app).await?, &uris).await
 }
 
-// ---------- Web API i lletres ----------
-
-/// Proxy de la Web API de Spotify (cerca, playlists, biblioteca...). `path` comença per `/v1/`.
+/// Targetes (nom, artistes, portada) d'àlbums.
 #[tauri::command]
-async fn api(
-    ona: State<'_, Ona>,
-    path: String,
-    method: Option<String>,
-    body: Option<Value>,
-) -> Res<Value> {
-    if !path.starts_with("/v1/") {
-        return Err("Ruta no permesa".into());
+async fn albums(app: AppHandle, ona: State<'_, Ona>, uris: Vec<String>) -> Res<Value> {
+    meta::albums(&ona.session(&app).await?, &uris).await
+}
+
+/// Targetes (nom, retrat) d'artistes.
+#[tauri::command]
+async fn artists(app: AppHandle, ona: State<'_, Ona>, uris: Vec<String>) -> Res<Value> {
+    meta::artists(&ona.session(&app).await?, &uris).await
+}
+
+#[tauri::command]
+async fn album(app: AppHandle, ona: State<'_, Ona>, id: String) -> Res<Value> {
+    meta::album(&ona.session(&app).await?, &id).await
+}
+
+#[tauri::command]
+async fn artist(app: AppHandle, ona: State<'_, Ona>, id: String) -> Res<Value> {
+    meta::artist(&ona.session(&app).await?, &id).await
+}
+
+/// Fitxers d'àudio de la carpeta Música (es reprodueixen amb l'<audio> de la interfície).
+#[tauri::command]
+async fn local_tracks(app: AppHandle) -> Res<Value> {
+    let dir = app.path().audio_dir().map_err(err)?;
+    tauri::async_runtime::spawn_blocking(move || local::tracks(&dir)).await.map_err(err)
+}
+
+/// Cerca de cançons: el context `spotify:search:<text>` que resol el reproductor.
+#[tauri::command]
+async fn search(app: AppHandle, ona: State<'_, Ona>, q: String) -> Res<Value> {
+    let term: String = q
+        .trim()
+        .bytes()
+        .map(|b| match b {
+            b' ' => "+".to_string(),
+            b if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) => (b as char).to_string(),
+            b => format!("%{b:02X}"),
+        })
+        .collect();
+    let session = ona.session(&app).await?;
+    let ctx = session.spclient().get_context(&format!("spotify:search:{term}")).await.map_err(err)?;
+    let uris: Vec<String> = ctx.pages.iter().flat_map(|p| &p.tracks).map(|t| t.uri().to_string()).take(50).collect();
+    meta::tracks(&session, &uris).await
+}
+
+/// Pistes d'un context (playlist, àlbum, artista, M'agrada...) com les resol el reproductor.
+#[tauri::command]
+async fn context(app: AppHandle, ona: State<'_, Ona>, uri: String) -> Res<Value> {
+    if !uri.starts_with("spotify:") || uri.contains(['/', '?', '#']) {
+        return Err("URI no vàlida".into());
     }
-    let token = ona.web_token().await?;
-    let method = reqwest::Method::from_bytes(method.as_deref().unwrap_or("GET").as_bytes())
+    let session = ona.session(&app).await?;
+    let bytes = session
+        .spclient()
+        .request_as_json(&reqwest::Method::GET, &format!("/context-resolve/v1/{uri}"), None, None)
+        .await
         .map_err(err)?;
-    let mut req = ona
-        .http
-        .request(method, format!("https://api.spotify.com{path}"))
-        .bearer_auth(&token);
-    if let Some(body) = body {
-        req = req.json(&body);
+    serde_json::from_slice(&bytes).map_err(err)
+}
+
+fn list_header(a: &librespot::protocol::playlist4_external::ListAttributes) -> Value {
+    let image = a
+        .picture
+        .as_ref()
+        .filter(|p| !p.is_empty())
+        .map(|p| format!("https://i.scdn.co/image/{}", p.iter().map(|b| format!("{b:02x}")).collect::<String>()))
+        // Les playlists de Spotify (DJ, mixos...) porten la imatge com a URLs per mida.
+        .or_else(|| a.picture_size.iter().find(|p| p.target_name() == "default").or(a.picture_size.first()).map(|p| p.url().to_string()));
+    json!({ "name": a.name(), "description": a.description(), "image": image })
+}
+
+/// Les playlists de la biblioteca (el "rootlist"), amb carpetes aplanades.
+#[tauri::command]
+async fn rootlist(app: AppHandle, ona: State<'_, Ona>) -> Res<Value> {
+    use librespot::protocol::playlist4_external::SelectedListContent;
+    use protobuf::Message;
+    let session = ona.session(&app).await?;
+    let bytes = session.spclient().get_rootlist(0, Some(1000)).await.map_err(err)?;
+    let list = SelectedListContent::parse_from_bytes(&bytes).map_err(err)?;
+    Ok(list
+        .contents
+        .items
+        .iter()
+        .zip(&list.contents.meta_items)
+        .filter(|(i, _)| i.uri().starts_with("spotify:playlist:"))
+        .map(|(i, m)| {
+            let mut v = list_header(&m.attributes);
+            v["uri"] = json!(i.uri());
+            v["owner"] = json!(m.owner_username());
+            v["total"] = json!(m.length());
+            v
+        })
+        .collect())
+}
+
+/// Capçalera i URIs d'una playlist (protobuf playlist4, com el client natiu).
+#[tauri::command]
+async fn playlist(app: AppHandle, ona: State<'_, Ona>, id: String) -> Res<Value> {
+    use librespot::protocol::playlist4_external::SelectedListContent;
+    use protobuf::Message;
+    let id = SpotifyId::from_base62(&id).map_err(err)?;
+    let session = ona.session(&app).await?;
+    let bytes = session.spclient().get_playlist(&id).await.map_err(err)?;
+    let list = SelectedListContent::parse_from_bytes(&bytes).map_err(err)?;
+    let mut v = list_header(&list.attributes);
+    v["owner"] = json!(list.owner_username());
+    v["uris"] = list.contents.items.iter().map(|i| i.uri()).collect();
+    Ok(v)
+}
+
+const COLLECTION_PROTO: &str = "application/vnd.collection-v2.spotify.proto";
+
+/// Un "set" de la col·lecció: "collection" (M'agrada i àlbums), "artist", "ylpin" (fixats).
+/// Retorna [{uri, added_at}] del més nou al més antic.
+#[tauri::command]
+async fn collection(app: AppHandle, ona: State<'_, Ona>, set: String) -> Res<Value> {
+    let session = ona.session(&app).await?;
+    let user = session.username();
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("content-type", reqwest::header::HeaderValue::from_static(COLLECTION_PROTO));
+    let mut out = Vec::new();
+    let mut token = String::new();
+    // shortcut: tall a 50 pàgines (15.000 elements), prou per a una biblioteca personal.
+    for _ in 0..50 {
+        let body = pb::page_request(&user, &set, &token, 300);
+        let bytes = session
+            .spclient()
+            .request(&reqwest::Method::POST, "/collection/v2/paging", Some(headers.clone()), Some(&body))
+            .await
+            .map_err(err)?;
+        let (items, next) = pb::page_response(&bytes).ok_or("resposta de col·lecció il·legible")?;
+        out.extend(items.into_iter().filter(|i| !i.removed).map(|i| json!({ "uri": i.uri, "added_at": i.added_at })));
+        if next.is_empty() {
+            break;
+        }
+        token = next;
     }
-    let resp = req.send().await.map_err(err)?;
-    let status = resp.status();
-    if status.as_u16() == 429 {
-        let wait = resp
-            .headers()
-            .get("retry-after")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("?")
-            .to_string();
-        return Err(format!("rate_limited:{wait}"));
-    }
-    let text = resp.text().await.map_err(err)?;
-    if !status.is_success() {
-        log::warn!("API {path} -> {status}: {text}");
-        return Err(format!("HTTP {status}: {text}"));
-    }
-    if text.trim().is_empty() {
-        return Ok(Value::Null);
-    }
-    serde_json::from_str(&text).map_err(err)
+    Ok(Value::Array(out))
+}
+
+/// Afegeix o treu URIs d'un set de la col·lecció (M'agrada, desar àlbum, seguir artista).
+#[tauri::command]
+async fn collection_write(app: AppHandle, ona: State<'_, Ona>, set: String, uris: Vec<String>, remove: bool) -> Res<()> {
+    let session = ona.session(&app).await?;
+    let body = pb::write_request(&session.username(), &set, &uris, remove, unix_now());
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("content-type", reqwest::header::HeaderValue::from_static(COLLECTION_PROTO));
+    session
+        .spclient()
+        .request(&reqwest::Method::POST, "/collection/v2/write", Some(headers), Some(&body))
+        .await
+        .map_err(err)?;
+    Ok(())
+}
+
+/// Perfil de l'usuari (nom, imatge...).
+#[tauri::command]
+async fn me(app: AppHandle, ona: State<'_, Ona>) -> Res<Value> {
+    let session = ona.session(&app).await?;
+    let bytes = session
+        .spclient()
+        .get_user_profile(&session.username(), Some(0), Some(0))
+        .await
+        .map_err(err)?;
+    serde_json::from_slice(&bytes).map_err(err)
 }
 
 /// Lletra sincronitzada: primer la de Spotify, si no n'hi ha, LRCLIB.
@@ -496,7 +517,14 @@ async fn get_lyrics(
     artist: String,
     album: String,
     duration_ms: u32,
+    syllables: Option<bool>,
 ) -> Res<Value> {
+    // Primer la de síl·labes (si no és el mode lleuger), després la de Spotify (per línies) i LRCLIB.
+    if syllables.unwrap_or(true) {
+        if let Some(found) = lyrics::from_betterlyrics(&ona.http, &title, &artist, &album, duration_ms).await {
+            return Ok(found);
+        }
+    }
     if let Ok(session) = ona.session(&app).await {
         if let Ok(track) = SpotifyId::from_base62(&id) {
             if let Ok(bytes) = session.spclient().get_lyrics(&track).await {
@@ -555,15 +583,12 @@ pub fn run() {
             let media = media::Media::default();
             media.set(media::init(app.handle()));
             app.manage(media);
-            let viz = Arc::new(viz::VizShared::default());
-            viz::spawn_analyser(app.handle().clone(), viz.clone());
             app.manage(Ona {
                 inner: Mutex::new(Inner::default()),
                 mixer: Arc::new(mixer),
                 data_dir,
                 http,
                 pending_login: Default::default(),
-                viz,
                 now: Default::default(),
             });
             Ok(())
@@ -583,7 +608,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            restore, login, logout, get_client_id, set_client_id, play, preload, resume, pause, seek, set_volume, set_viz, player_state, media::media_update, media::media_state, api,
+            restore, login, logout, play, preload, resume, pause, seek, set_volume, player_state, media::media_update, media::media_state, tracks, albums, artists, album, artist, search, local_tracks, context, rootlist, playlist, collection, collection_write, me,
             get_lyrics
         ])
         .run(tauri::generate_context!())

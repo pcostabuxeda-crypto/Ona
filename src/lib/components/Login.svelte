@@ -1,185 +1,84 @@
 <script lang="ts">
-  let {
-    onlogin,
-    busy,
-    error,
-    hasClientId,
-  }: { onlogin: (clientId?: string) => void; busy: boolean; error: string; hasClientId: boolean } = $props();
-  let id = $state("");
-  let editing = $state(false);
-  const askId = $derived(!hasClientId || editing);
+  /** Entrada amb el compte de Spotify al navegador (la sessió és la de librespot: no cal cap Client ID). */
+  let { onlogin, onfree, busy, error }: { onlogin: () => void; onfree: () => void; busy: boolean; error: string } = $props();
 </script>
 
-<div class="login">
-  <div class="aura" aria-hidden="true"><i></i><i></i></div>
-  <div class="card">
-    <svg class="logo" width="88" height="56" viewBox="0 0 44 28" aria-hidden="true">
-      <path d="M2 14c5-10 10-10 15 0s10 10 15 0 7-8 10-6" fill="none" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round" />
-      <defs>
-        <linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#8b6cff" /><stop offset="1" stop-color="#ff6fb5" /></linearGradient>
-      </defs>
+<section class="login" data-tauri-drag-region>
+  <div class="box">
+    <svg width="48" height="48" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#fff" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20m4.6 14.4a.6.6 0 0 1-.9.2c-2.4-1.4-5.3-1.8-8.8-1a.6.6 0 1 1-.3-1.2c3.8-.9 7-.5 9.7 1.1.3.2.4.6.3.9m1.2-2.7a.8.8 0 0 1-1 .3c-2.7-1.7-6.9-2.2-10.2-1.2a.8.8 0 0 1-.4-1.5c3.7-1.1 8.3-.6 11.4 1.4.3.2.4.7.2 1m.1-2.8C14.7 9 9.4 8.8 6.3 9.7a.9.9 0 1 1-.5-1.8C9.3 6.9 15.2 7.1 18.9 9.3a.9.9 0 0 1-1 1.6" />
     </svg>
-    <h1>ona</h1>
-    <p>Tota la música de Spotify, en una app que no se't menja l'ordinador.</p>
-    {#if askId}
-      <ol class="steps">
-        <li>Obre <b>developer.spotify.com/dashboard</b> i crea una app.</li>
-        <li>Redirect URI: <code>http://127.0.0.1:5588/login</code> · marca <b>Web API</b>.</li>
-        <li>Enganxa aquí el <b>Client ID</b>.</li>
-      </ol>
-      <input class="cid" bind:value={id} placeholder="Client ID (32 caràcters)" spellcheck="false" />
-      <button onclick={() => onlogin(id)} disabled={id.trim().length !== 32}>
-        {busy ? "Torna a obrir el navegador" : "Desa i entra"}
-      </button>
-    {:else}
-      <button onclick={() => onlogin()}>
-        {busy ? "Torna a obrir el navegador" : "Entra amb Spotify"}
-      </button>
-      <button class="link" onclick={() => (editing = true)}>Canvia el Client ID</button>
-    {/if}
-    {#if busy}<small>S'obrirà el navegador (potser dues vegades). Accepta l'accés i torna aquí.</small>{/if}
-    {#if error}<small class="err">{error}</small>{/if}
-    <small class="note">Cal un compte Premium.</small>
+    <h1>Milions de cançons.<br />Sense pagar en RAM.</h1>
+    <p class="muted">Necessites un compte de Spotify Premium. S'obrirà el navegador per iniciar la sessió.</p>
+    <button class="go" onclick={onlogin} disabled={busy}>{busy ? "Esperant el navegador…" : "Inicia sessió amb Spotify"}</button>
+    {#if busy}<button class="retry" onclick={onlogin}>Torna a obrir el navegador</button>{/if}
+    <button class="free" onclick={onfree}>Continua sense Spotify</button>
+    <p class="muted small">Sense compte: música lliure d'Audius i els fitxers de la teva carpeta Música.</p>
+    {#if error}<p class="err">{error}</p>{/if}
   </div>
-</div>
+</section>
 
 <style>
   .login {
-    position: relative;
     flex: 1;
     display: grid;
     place-items: center;
-    overflow: hidden;
+    margin: 0 8px 8px;
+    border-radius: var(--radius);
+    background: linear-gradient(#2a2a2a, var(--base) 60%);
   }
-  .aura {
-    position: absolute;
-    inset: 0;
-  }
-  .aura i {
-    position: absolute;
-    width: 60vmax;
-    height: 60vmax;
-    border-radius: 50%;
-    animation: float 18s ease-in-out infinite alternate;
-  }
-  .aura i:first-child {
-    left: -15vmax;
-    top: -20vmax;
-    background: radial-gradient(closest-side, rgb(110 80 255 / 0.45), transparent);
-  }
-  .aura i:last-child {
-    right: -15vmax;
-    bottom: -25vmax;
-    background: radial-gradient(closest-side, rgb(255 90 170 / 0.35), transparent);
-    animation-duration: 24s;
-  }
-  @keyframes float {
-    to {
-      transform: translate(8vmax, 6vmax) scale(1.1);
-    }
-  }
-  .card {
-    position: relative;
+  .box {
+    max-width: 420px;
+    padding: 32px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 14px;
+    gap: 16px;
     text-align: center;
-    max-width: 420px;
-    animation: rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  }
-  .logo path {
-    stroke-dasharray: 80;
-    stroke-dashoffset: 80;
-    animation: draw 1.4s 0.2s cubic-bezier(0.6, 0, 0.2, 1) forwards;
-  }
-  @keyframes draw {
-    to {
-      stroke-dashoffset: 0;
-    }
   }
   h1 {
-    font-size: 56px;
-    margin: 0;
-    letter-spacing: -0.05em;
+    font-size: 32px;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
   }
-  p {
-    margin: 0 0 12px;
-    color: var(--text-2);
-    font-size: 16px;
-    line-height: 1.5;
-  }
-  button {
+  .go {
+    margin-top: 8px;
     padding: 14px 32px;
     border-radius: 999px;
+    background: var(--accent);
+    color: #000;
+    font-size: 16px;
     font-weight: 700;
-    font-size: 15px;
-    color: #0b0b12;
-    background: linear-gradient(135deg, #a58bff, #ff8cc6);
-    box-shadow: 0 14px 34px -12px rgb(200 120 255 / 0.8);
-    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: transform 0.1s, background 0.1s;
   }
-  button:hover:not(:disabled) {
-    transform: translateY(-2px) scale(1.03);
+  .go:hover:not(:disabled) {
+    transform: scale(1.04);
+    background: #3be477;
   }
-  button:disabled {
+  .go:disabled {
     opacity: 0.7;
+    cursor: default;
   }
-  small {
+  .retry {
+    font-size: 14px;
     color: var(--text-2);
+    text-decoration: underline;
   }
-  .steps {
-    text-align: left;
+  .free {
+    padding: 12px 28px;
+    border-radius: 999px;
+    border: 1px solid #727272;
+    font-weight: 700;
+  }
+  .free:hover {
+    border-color: #fff;
+    transform: scale(1.04);
+  }
+  .small {
+    font-size: 13px;
     margin: 0;
-    padding-left: 20px;
-    color: var(--text-2);
-    line-height: 1.7;
-    font-size: 13px;
-  }
-  .steps b {
-    color: var(--text);
-  }
-  code {
-    font-size: 12px;
-    padding: 1px 6px;
-    border-radius: 5px;
-    background: rgb(255 255 255 / 0.1);
-    color: var(--text);
-    user-select: text;
-  }
-  .cid {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 12px 16px;
-    border-radius: 12px;
-    border: 1px solid rgb(255 255 255 / 0.12);
-    background: rgb(255 255 255 / 0.05);
-    color: var(--text);
-    font: inherit;
-    font-family: ui-monospace, Consolas, monospace;
-    text-align: center;
-    outline: none;
-  }
-  .cid:focus {
-    border-color: #a58bff;
-  }
-  .link {
-    padding: 0;
-    background: none;
-    box-shadow: none;
-    color: var(--text-3);
-    font-weight: 500;
-    font-size: 13px;
-  }
-  .link:hover:not(:disabled) {
-    transform: none;
-    color: var(--text);
   }
   .err {
-    color: #ff8a8a;
-  }
-  .note {
-    color: var(--text-3);
-    margin-top: 8px;
+    color: #f3727f;
   }
 </style>

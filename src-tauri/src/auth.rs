@@ -22,8 +22,6 @@ const DONE_HTML: &str = r#"<!doctype html><meta charset="utf-8"><title>Ona</titl
 
 pub struct Tokens {
     pub access: String,
-    pub refresh: String,
-    pub expires_in: u64,
 }
 
 fn random_b64(len: usize) -> String {
@@ -81,22 +79,6 @@ pub async fn authorize(
     .await
 }
 
-pub async fn refresh(http: &reqwest::Client, client_id: &str, refresh: &str) -> Result<Tokens, String> {
-    let mut t = token_request(
-        http,
-        &[
-            ("grant_type", "refresh_token"),
-            ("refresh_token", refresh),
-            ("client_id", client_id),
-        ],
-    )
-    .await?;
-    if t.refresh.is_empty() {
-        t.refresh = refresh.to_string();
-    }
-    Ok(t)
-}
-
 async fn token_request(http: &reqwest::Client, form: &[(&str, &str)]) -> Result<Tokens, String> {
     let resp = http
         .post("https://accounts.spotify.com/api/token")
@@ -115,11 +97,8 @@ async fn token_request(http: &reqwest::Client, form: &[(&str, &str)]) -> Result<
                 .unwrap_or("error desconegut")
         ));
     }
-    let s = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
     Ok(Tokens {
-        access: s("access_token"),
-        refresh: s("refresh_token"),
-        expires_in: body.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(3600),
+        access: body.get("access_token").and_then(|v| v.as_str()).unwrap_or("").to_string(),
     })
 }
 
