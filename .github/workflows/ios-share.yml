@@ -538,6 +538,28 @@ jobs:
         if: steps.detect.outputs.type == 'kmp'
         uses: gradle/actions/setup-gradle@v6
 
+      # Ona (Tauri): com a ios-build.yml, la llibreria Rust es compila abans (aquí per al
+      # simulador, en debug) i la fase "Build Rust Code" d'Xcode es buida.
+      - name: Setup Node.js (Tauri)
+        if: hashFiles('src-tauri/tauri.conf.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build Tauri Rust library
+        if: hashFiles('src-tauri/tauri.conf.json') != ''
+        env:
+          IOS_PATH: ${{ steps.params.outputs.ios_path }}
+        run: |
+          set -e
+          npm ci
+          npm run build
+          rustup target add aarch64-apple-ios-sim
+          cargo build --manifest-path src-tauri/Cargo.toml --lib --target aarch64-apple-ios-sim --features tauri/custom-protocol
+          mkdir -p "$IOS_PATH/Externals/arm64/debug"
+          cp src-tauri/target/aarch64-apple-ios-sim/debug/libona_lib.a "$IOS_PATH/Externals/arm64/debug/libapp.a"
+          perl -0pi -e 's/shellScript = "/shellScript = "exit 0\\n/' "$IOS_PATH"/*.xcodeproj/project.pbxproj
+
       - name: Build for the simulator
         id: build
         env:
