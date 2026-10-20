@@ -556,7 +556,7 @@ jobs:
           npm run build
           rustup target add aarch64-apple-ios-sim
           cargo build --manifest-path src-tauri/Cargo.toml --lib --target aarch64-apple-ios-sim --features tauri/custom-protocol
-          mkdir -p "$IOS_PATH/Externals/arm64/debug"
+          mkdir -p "$IOS_PATH/Externals/arm64/debug" "$IOS_PATH/assets"
           cp src-tauri/target/aarch64-apple-ios-sim/debug/libona_lib.a "$IOS_PATH/Externals/arm64/debug/libapp.a"
           perl -0pi -e 's/shellScript = "/shellScript = "exit 0\\n/' "$IOS_PATH"/*.xcodeproj/project.pbxproj
 

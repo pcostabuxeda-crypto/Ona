@@ -879,7 +879,7 @@ jobs:
           rustup target add aarch64-apple-ios
           if [ "$CONFIGURATION" = release ]; then PROFILE=release; FLAG=--release; else PROFILE=debug; FLAG=; fi
           cargo build --manifest-path src-tauri/Cargo.toml --lib --target aarch64-apple-ios $FLAG --features tauri/custom-protocol
-          mkdir -p "$IOS_PATH/Externals/arm64/$CONFIGURATION"
+          mkdir -p "$IOS_PATH/Externals/arm64/$CONFIGURATION" "$IOS_PATH/assets"
           cp "src-tauri/target/aarch64-apple-ios/$PROFILE/libona_lib.a" "$IOS_PATH/Externals/arm64/$CONFIGURATION/libapp.a"
           perl -0pi -e 's/shellScript = "/shellScript = "exit 0\\n/' "$IOS_PATH"/*.xcodeproj/project.pbxproj
 
