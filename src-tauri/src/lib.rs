@@ -9,6 +9,7 @@ mod lyrics;
 mod media;
 mod meta;
 mod pb;
+mod taskbar;
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -586,13 +587,7 @@ pub fn run() {
     tauri::Builder::default()
         // Només una Ona oberta: si se n'obre una altra, es tanca i porta la primera al davant.
         // (Ha d'anar primer de tot.)
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.unminimize();
-                let _ = w.show();
-                let _ = w.set_focus();
-            }
-        }))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| taskbar::show_main(app)))
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
@@ -603,6 +598,7 @@ pub fn run() {
             let media = media::Media::default();
             media.set(media::init(app.handle()));
             app.manage(media);
+            taskbar::init(app.handle())?;
             app.manage(Ona {
                 inner: Mutex::new(Inner::default()),
                 mixer: Arc::new(mixer),

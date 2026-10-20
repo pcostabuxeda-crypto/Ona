@@ -58,6 +58,7 @@ impl Media {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub fn media_update(
+    app: AppHandle,
     media: State<'_, Media>,
     title: Option<String>,
     artist: Option<String>,
@@ -65,6 +66,7 @@ pub fn media_update(
     cover: Option<String>,
     duration_ms: Option<u64>,
 ) {
+    crate::taskbar::set_track(&app, title.as_deref(), artist.as_deref());
     let mut guard = media.0.lock().unwrap();
     let Some(c) = guard.as_mut() else { return };
     if title.is_none() {
@@ -82,7 +84,8 @@ pub fn media_update(
 
 /// Estat (sona / en pausa) i posició, perquè la barra de temps del sistema vagi bé.
 #[tauri::command]
-pub fn media_state(media: State<'_, Media>, playing: bool, position_ms: u64) {
+pub fn media_state(app: AppHandle, media: State<'_, Media>, playing: bool, position_ms: u64) {
+    crate::taskbar::set_playing(&app, playing);
     let mut guard = media.0.lock().unwrap();
     let Some(c) = guard.as_mut() else { return };
     let progress = Some(MediaPosition(Duration::from_millis(position_ms)));
