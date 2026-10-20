@@ -7,7 +7,7 @@ use serde_json::json;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, Wry,
+    AppHandle, Manager, Wry,
 };
 
 const TRAY: &str = "ona";
@@ -17,15 +17,18 @@ static PLAYING: AtomicBool = AtomicBool::new(false);
 pub struct Toggle(MenuItem<Wry>);
 
 pub fn show_main(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
-        let _ = w.unminimize();
-        let _ = w.show();
-        let _ = w.set_focus();
+    match app.get_webview_window("main") {
+        Some(w) => {
+            let _ = w.unminimize();
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+        None => crate::solo::reopen(app),
     }
 }
 
 fn media(app: &AppHandle, action: &str) {
-    let _ = app.emit("media", json!({ "action": action }));
+    crate::control(app, json!({ "action": action }));
 }
 
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
@@ -58,6 +61,12 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     #[cfg(windows)]
     thumb::init(app);
     Ok(())
+}
+
+/// Botons de la miniatura per a una finestra principal nova (en tornar del mode «només so»).
+pub fn reinit_thumb(_app: &AppHandle) {
+    #[cfg(windows)]
+    thumb::init(_app);
 }
 
 /// Cançó actual al rètol de la safata (Windows el talla a 127 caràcters).

@@ -92,6 +92,22 @@ export const me = () => cached("me", false, () => invoke<any>("me"));
 export const playUri = (uri: string, position_ms = 0) => invoke("play", { uri, positionMs: position_ms });
 export const preloadUri = (uri: string) => invoke("preload", { uri });
 export const resume = () => invoke("resume");
+/** Mode «només so»: la cua (a partir de la que sona) passa a Rust i es tanca la finestra. */
+export const soundOnly = (tracks: Track[], repeatOne: boolean) =>
+  invoke("sound_only", {
+    items: tracks.map((t) => ({
+      uri: t.uri,
+      title: t.name,
+      artist: t.artists.map((a) => a.name).join(", "),
+      album: t.album.name ?? null,
+      cover: t.album.image ?? null,
+      durationMs: t.duration_ms ?? null,
+    })),
+    repeatOne,
+  });
+/** Quantes cançons ha avançat Rust sense finestra (0 si no n'hi havia). */
+export const soundOnlyTake = () => invoke<number>("sound_only_take");
+export const quit = () => invoke("quit");
 /** Ordre al Spotify Connect quan el que sona ho ha posat el mòbil. */
 export const connectCmd = (action: "toggle" | "next" | "prev" | "seek", ms?: number) =>
   invoke("connect_cmd", { action, ms: ms == null ? null : Math.round(ms) }).catch(() => {});

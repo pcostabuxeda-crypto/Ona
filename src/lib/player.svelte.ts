@@ -215,6 +215,9 @@ class PlayerState {
       if (e.kind !== "loading") this.setBase(e.position_ms ?? 0, e.kind === "playing");
     });
 
+    // Tancar la finestra amb música: Rust continua la cua sense interfície (estalvia la WebView).
+    await listen("close-to-tray", () => this.handOff());
+
     // Botons del sistema: tecles multimèdia, caràtula de Windows, FluentFlyout...
     await listen<{ action: string; ms?: number }>("media", ({ payload: m }) => {
       if (m.action === "play" && !this.playing) this.toggle();
@@ -293,6 +296,8 @@ class PlayerState {
     let saved = valid(raw);
     if (saved) write(BAK_KEY, raw!);
     else if ((saved = valid(read(BAK_KEY)))) this.dirty = true; // reescriu la malmesa al proper desat
+    // Si Ona venia del mode «només so», Rust ha avançat la cua `steps` cançons.
+    const steps = await A.soundOnlyTake().catch(() => 0);
     if (saved) {
       this.queue = saved.queue;
       this.order = saved.order;
@@ -302,6 +307,7 @@ class PlayerState {
       this.repeat = saved.repeat ?? "off";
       this.upNext = saved.upNext ?? [];
       this.fromUser = saved.fromUser ?? null;
+      for (let i = 0; i < steps && this.step(this.repeat === "all"); i++) this.dirty = true;
     }
 
     const live = await A.playerState().catch(() => null);
@@ -447,6 +453,29 @@ class PlayerState {
   clearUpcoming() {
     this.order = this.order.slice(0, this.pos + 1);
     this.touch();
+  }
+
+  /** Passa a Rust la cua des de la cançó actual (fins a 200, o fins a la primera que no és de Spotify). */
+  private async handOff() {
+    const t = this.current;
+    // Els fitxers locals i Audius sonen a la WebView: sense ella no hi ha so, així que es tanca com abans.
+    if (!t || (t.src && !this.remote)) return void A.quit();
+    this.dirty = true;
+    this.save(); // la cua tal com és ara: en tornar es refà avançant les mateixes passes
+    const items: Track[] = [];
+    if (!this.remote) {
+      items.push(t);
+      // Les mateixes passes que `step`, sobre còpies (sense tocar l'estat, que es veu a Windows).
+      let pos = this.pos;
+      const user = [...this.upNext];
+      while (this.repeat !== "one" && items.length < 200) {
+        const n = nextStep(user.length, pos, this.order.length, this.repeat === "all");
+        const next = n === "user" ? user.shift() : n >= 0 ? this.queue[this.order[(pos = n)]] : undefined;
+        if (!next || next.src) break;
+        items.push(next);
+      }
+    }
+    await A.soundOnly(items, this.repeat === "one").catch(() => A.quit());
   }
 
   /** Connect ja no fa sonar res aquí: es torna a la cançó d'Ona, en pausa on s'havia quedat. */

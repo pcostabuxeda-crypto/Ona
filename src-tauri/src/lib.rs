@@ -10,6 +10,7 @@ mod lyrics;
 mod media;
 mod meta;
 mod pb;
+mod solo;
 mod taskbar;
 
 use std::{path::PathBuf, sync::Arc};
@@ -184,6 +185,7 @@ fn forward_events(app: AppHandle, player: &Arc<Player>, now: SharedNow) {
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
             remember(&now, &event);
+            solo::on_event(&app, &event);
             let payload = match event {
                 PlayerEvent::Loading { track_id, position_ms, .. } => {
                     json!({ "kind": "loading", "uri": track_id.to_string(), "position_ms": position_ms })
@@ -319,6 +321,19 @@ async fn logout(ona: State<'_, Ona>) -> Res<()> {
 }
 
 // ---------- Reproductor ----------
+
+/// Botons de la safata, tecles multimèdia i miniatura: els porta Rust si no hi ha interfície.
+pub fn control(app: &AppHandle, payload: Value) {
+    if !solo::control(app, &payload) {
+        let _ = app.emit("media", payload);
+    }
+}
+
+#[tauri::command]
+fn quit(app: AppHandle) {
+    solo::HANDED.store(true, std::sync::atomic::Ordering::Release);
+    app.exit(0);
+}
 
 /// Botons d'Ona mentre sona el que ha posat el mòbil (Spotify Connect).
 #[tauri::command]
@@ -615,6 +630,7 @@ pub fn run() {
             let media = media::Media::default();
             media.set(media::init(app.handle()));
             app.manage(media);
+            app.manage(solo::Solo::default());
             taskbar::init(app.handle())?;
             app.manage(Ona {
                 inner: Mutex::new(Inner::default()),
@@ -628,10 +644,26 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Tancar la finestra principal tanca l'app: si no, la lletra flotant la mantindria viva sense finestra.
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
+            // Tancar la finestra principal: si sona música, la interfície passa la cua a Rust i
+            // Ona continua sense finestra (mode «només so»); si no, tanca l'app (també la lletra flotant).
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
-                    window.app_handle().exit(0);
+                    let app = window.app_handle().clone();
+                    let ona = app.state::<Ona>();
+                    let playing = ona.now.lock().unwrap().as_ref().is_some_and(|n| n.playing) || ona.connect.is_active();
+                    if !playing {
+                        return app.exit(0);
+                    }
+                    api.prevent_close();
+                    solo::HANDED.store(false, std::sync::atomic::Ordering::Release);
+                    let _ = window.emit("close-to-tray", ());
+                    // Si la interfície no respon, es tanca com abans.
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_secs(3));
+                        if !solo::HANDED.load(std::sync::atomic::Ordering::Acquire) {
+                            app.exit(0);
+                        }
+                    });
                 }
             }
             if let tauri::WindowEvent::Resized(_) = event {
@@ -649,8 +681,16 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             restore, login, logout, connect_cmd, play, preload, resume, pause, seek, set_volume, player_state, media::media_update, media::media_state, tracks, albums, artists, album, artist, search, local_tracks, context, rootlist, playlist, collection, collection_write, me,
-            get_lyrics
+            get_lyrics, quit, solo::sound_only, solo::sound_only_take
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app, event| {
+            // En mode «només so» no queda cap finestra, però l'app ha de continuar sonant.
+            if let tauri::RunEvent::ExitRequested { api, code: None, .. } = event {
+                if app.state::<solo::Solo>().active() {
+                    api.prevent_exit();
+                }
+            }
+        });
 }

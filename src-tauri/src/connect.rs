@@ -96,6 +96,10 @@ impl Connect {
         }
     }
 
+    pub fn is_active(&self) -> bool {
+        self.active.load(Ordering::Acquire)
+    }
+
     /// L'usuari reprodueix des d'Ona: Connect para i deixa de ser el dispositiu actiu.
     pub fn release(&self) {
         if self.active.swap(false, Ordering::AcqRel) {
