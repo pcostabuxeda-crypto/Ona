@@ -591,18 +591,24 @@ async fn get_lyrics(
             return Ok(found);
         }
     }
+    let mut spotify = None;
     if let Ok(session) = ona.session(&app).await {
         if let Ok(track) = SpotifyId::from_base62(&id) {
             if let Ok(bytes) = session.spclient().get_lyrics(&track).await {
-                if let Some(found) = lyrics::from_spotify(&bytes) {
-                    return Ok(found);
-                }
+                spotify = lyrics::from_spotify(&bytes);
             }
         }
     }
-    Ok(lyrics::from_lrclib(&ona.http, &title, &artist, &album, duration_ms)
-        .await
-        .unwrap_or(Value::Null))
+    let synced = |v: &Value| v["synced"].as_bool() == Some(true);
+    if let Some(found) = spotify.as_ref().filter(|v| synced(v)) {
+        return Ok(found.clone());
+    }
+    // Spotify no en té o no està sincronitzada: LRCLIB; si allà tampoc no ho està, la de Spotify.
+    let lrclib = lyrics::from_lrclib(&ona.http, &title, &artist, &album, duration_ms).await;
+    Ok(match (lrclib, spotify) {
+        (Some(l), _) if synced(&l) => l,
+        (l, s) => s.or(l).unwrap_or(Value::Null),
+    })
 }
 
 /// Quan la finestra es minimitza, WebView2 allibera tota la memòria que pot (i la recupera en tornar).
