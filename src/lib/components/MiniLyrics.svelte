@@ -40,9 +40,18 @@
         synced = !!l?.synced;
         if (l?.ttml) {
           try {
-            lines = detectParser(l.ttml)
+            // TTML «per línia» (itunes:timing="Line") porta les paraules buides: abans la línia actual sortia
+            // en blanc i només es veia la següent. Sense paraules, s'estimen com a les altres lletres.
+            const ps = detectParser(l.ttml)
               .parse(l.ttml, t.duration_ms)
-              .map((x) => ({ t: x.startTimeMs, text: x.words, words: x.parts?.map((p) => ({ t: p.startTimeMs, text: p.words })) }));
+              .filter((x) => x.words.trim());
+            lines = ps.map((x, i) => ({
+              t: x.startTimeMs,
+              text: x.words,
+              words: x.parts?.length
+                ? x.parts.map((p) => ({ t: p.startTimeMs, text: p.words }))
+                : estimateWords(x.words, x.startTimeMs, ps[i + 1]?.startTimeMs),
+            }));
             return;
           } catch {}
         }
@@ -142,7 +151,7 @@
     <div class="lines" data-tauri-drag-region aria-live="polite">
       {#key active}
         <p class="cur" data-tauri-drag-region>
-          {#if lines[active].words}
+          {#if lines[active].words?.length}
             {#each lines[active].words ?? [] as w, i (i)}<span class:sung={i <= singing} class:now={i === singing}>{w.text}</span>{/each}
           {:else}
             {lines[active].text}
