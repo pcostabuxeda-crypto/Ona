@@ -21,11 +21,7 @@
           ui.say(settings.light ? "Mode lleuger: lletra simple i fons pla" : "Mode complet: síl·labes i fons animat");
         },
       },
-      {
-        label: settings.liner ? "Torna a l'estètica Spotify" : "Activa l'estètica Liner",
-        icon: "npv",
-        run: () => setSetting("liner", !settings.liner),
-      },
+      { label: "Aparença…", icon: "npv", run: () => (ui.appearance = true) },
       { label: ui.free ? "Inicia sessió amb Spotify" : "Tanca la sessió", icon: "logout", run: onlogout },
     ]);
   }

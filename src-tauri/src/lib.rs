@@ -12,6 +12,7 @@ mod meta;
 mod pb;
 mod solo;
 mod taskbar;
+mod viz;
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -52,6 +53,9 @@ const AUDIO_CACHE_BYTES: u64 = 512 * 1024 * 1024;
 
 type Res<T> = Result<T, String>;
 
+/// La finestra principal està minimitzada (el visualitzador no calcula res).
+pub static MINIMIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Error que la interfície reconeix: credencials desades que Spotify ja no accepta.
 const SESSION_EXPIRED: &str = "session_expired";
 
@@ -81,6 +85,7 @@ struct Ona {
     pending_login: std::sync::Mutex<Option<tokio::task::AbortHandle>>,
     now: SharedNow,
     connect: connect::Connect,
+    viz: Arc<viz::VizShared>,
 }
 
 impl Ona {
@@ -136,8 +141,10 @@ impl Ona {
             ..PlayerConfig::default()
         };
         let backend = audio_backend::find(None).ok_or("No hi ha cap sortida d'àudio")?;
+        let viz = self.viz.clone();
         Ok(Player::new(config, session, self.mixer.get_soft_volume(), move || {
-            backend(None, AudioFormat::default())
+            // El visualitzador copia les mostres de camí a la sortida (només si està encès).
+            Box::new(viz::VizSink { inner: backend(None, AudioFormat::default()), shared: viz })
         }))
     }
 
@@ -327,6 +334,12 @@ pub fn control(app: &AppHandle, payload: Value) {
     if !solo::control(app, &payload) {
         let _ = app.emit("media", payload);
     }
+}
+
+/// Visualitzador (estètica Ona): la interfície l'encén només mentre el mostra.
+#[tauri::command]
+fn set_viz(ona: State<'_, Ona>, enabled: bool) {
+    ona.viz.enabled.store(enabled, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[tauri::command]
@@ -631,6 +644,7 @@ pub fn run() {
             media.set(media::init(app.handle()));
             app.manage(media);
             app.manage(solo::Solo::default());
+            let viz = Arc::new(viz::VizShared::default());
             taskbar::init(app.handle())?;
             app.manage(Ona {
                 inner: Mutex::new(Inner::default()),
@@ -640,7 +654,9 @@ pub fn run() {
                 pending_login: Default::default(),
                 now: Default::default(),
                 connect: Default::default(),
+                viz: viz.clone(),
             });
+            viz::spawn_analyser(app.handle().clone(), viz);
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -671,6 +687,9 @@ pub fn run() {
                 {
                     static LOW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
                     let minimized = window.is_minimized().unwrap_or(false);
+                    if window.label() == "main" {
+                        MINIMIZED.store(minimized, std::sync::atomic::Ordering::Relaxed);
+                    }
                     if LOW.swap(minimized, std::sync::atomic::Ordering::Relaxed) != minimized {
                         if let Some(w) = window.app_handle().get_webview_window(window.label()) {
                             set_low_memory(&w, minimized);
@@ -681,7 +700,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             restore, login, logout, connect_cmd, play, preload, resume, pause, seek, set_volume, player_state, media::media_update, media::media_state, tracks, albums, artists, album, artist, search, local_tracks, context, rootlist, playlist, collection, collection_write, me,
-            get_lyrics, quit, solo::sound_only, solo::sound_only_take
+            get_lyrics, quit, set_viz, solo::sound_only, solo::sound_only_take
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

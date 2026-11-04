@@ -25,6 +25,8 @@ class Ui {
   user = $state<{ name: string; image?: string } | null>(null);
   /** Sense compte de Spotify: només Audius i fitxers locals. */
   free = $state(false);
+  /** Finestra d'aparença (estètica, fons i extres) oberta. */
+  appearance = $state(false);
   private toastTimer: ReturnType<typeof setTimeout> | undefined;
 
   go(v: View) {

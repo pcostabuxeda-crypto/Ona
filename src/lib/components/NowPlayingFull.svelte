@@ -11,6 +11,12 @@
   import Cover from "./Cover.svelte";
   import Icon from "./Icon.svelte";
   import Slider from "./Slider.svelte";
+  import Disc from "./Disc.svelte";
+  import Visualizer from "./Visualizer.svelte";
+  import { settings } from "$lib/settings.svelte";
+
+  // Estètica Ona: disc de vinil, ona a la barra i visualitzador a baix.
+  const ona = $derived(settings.look === "ona");
 
   const win = getCurrentWindow();
   const t = $derived(player.current);
@@ -22,6 +28,9 @@
 <svelte:window bind:innerWidth={width} onkeydown={(e) => e.key === "Escape" && ui.back()} />
 
 <div class="fs" class:stacked>
+  {#if ona && settings.viz && !settings.light}
+    <div class="viz"><Visualizer style="line" shape="wave" colorA={player.palette.a} colorB={player.palette.b} /></div>
+  {/if}
   <main class="scroll">
     <Lyrics inset={stacked ? "32px" : "52%"} dark />
   </main>
@@ -37,14 +46,18 @@
 
   {#if t}
     <aside class="side">
-      <Cover src={t.album.image} size={stacked ? 96 : "min(28vw, 340px)"} radius={12} />
+      {#if ona && settings.disc}
+        <Disc src={t.album.image} playing={player.playing} size={stacked ? "96px" : "min(28vw, 340px)"} />
+      {:else}
+        <Cover src={t.album.image} size={stacked ? 96 : "min(28vw, 340px)"} radius={ona ? 20 : 12} />
+      {/if}
       <div class="meta">
         <b>{t.name}</b>
         <span>{#if t.explicit}<i class="e">E</i>{/if}{t.artists.map((a) => a.name).join(", ")}</span>
       </div>
       <div class="time">
         <span>{A.fmtTime(player.positionMs)}</span>
-        <Slider value={player.progress} onchange={(v) => player.seekTo(v * t.duration_ms)} label="Progrés" />
+        <Slider value={player.progress} onchange={(v) => player.seekTo(v * t.duration_ms)} label="Progrés" wavy={ona && !settings.light} playing={player.playing} />
         <span>{A.fmtTime(t.duration_ms)}</span>
       </div>
       <div class="controls">
@@ -72,6 +85,16 @@
     inset: 0;
     z-index: 60;
     background: #0a0a0b;
+  }
+  .viz {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 22vh;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.8;
   }
   .scroll {
     position: absolute;

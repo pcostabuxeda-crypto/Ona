@@ -6,6 +6,23 @@
   import Icon from "./Icon.svelte";
   import Slider from "./Slider.svelte";
   import { mini, toggleMini } from "$lib/mini.svelte";
+  import { settings } from "$lib/settings.svelte";
+  import Disc from "./Disc.svelte";
+
+  const ona = $derived(settings.look === "ona");
+
+  /** Estètica Ona: cada clic al play fa sortir una ona (només transform/opacity). */
+  let ring = $state<HTMLSpanElement>();
+  function ping() {
+    if (!ona || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    ring?.animate(
+      [
+        { transform: "scale(1)", opacity: 0.7 },
+        { transform: "scale(2.1)", opacity: 0 },
+      ],
+      { duration: 650, easing: "cubic-bezier(.2,.7,.3,1)" },
+    );
+  }
 
   let liked = $state(false);
   let lastVol = 0.7;
@@ -57,7 +74,11 @@
   <div class="now">
     {#if t}
       <button class="cover" onclick={() => ui.togglePanel("npv")} title="Ara sona" aria-label="Ara sona: {t.name}" class:dim={!!player.error}>
-        <Cover src={t.album.thumb} size={56} radius={4} />
+        {#if ona && settings.disc}
+          <Disc src={t.album.thumb} playing={player.playing} size="56px" hole={false} />
+        {:else}
+          <Cover src={t.album.thumb} size={56} radius={ona ? 14 : 4} />
+        {/if}
       </button>
       <div class="txt">
         <a class="name" href="#album" onclick={(e) => (e.preventDefault(), t.album.id && ui.go({ name: "collection", kind: "album", id: t.album.id }))}>{t.name}</a>
@@ -90,8 +111,9 @@
     <div class="controls">
       <button class="ic wide" class:on={player.shuffle} aria-pressed={player.shuffle} onclick={() => player.toggleShuffle()} title="Ordre aleatori (Ctrl Maj S)"><Icon name="shuffle" size={16} /></button>
       <button class="ic" onclick={() => player.prev()} title="Anterior (Ctrl ←)"><Icon name="prev" size={16} /></button>
-      <button class="play" class:loading={player.loading} onclick={() => player.toggle()} title={player.playing ? "Pausa (espai)" : "Reprodueix (espai)"} disabled={!t}>
-        <Icon name={player.playing ? "pause" : "play"} size={16} />
+      <button class="play" class:loading={player.loading} onpointerdown={ping} onclick={() => player.toggle()} title={player.playing ? "Pausa (espai)" : "Reprodueix (espai)"} disabled={!t}>
+        {#if ona}<span class="ring" bind:this={ring} aria-hidden="true"></span>{/if}
+        <Icon name={player.playing ? "pause" : "play"} size={ona ? 18 : 16} />
       </button>
       <button class="ic" onclick={() => player.next()} title="Següent (Ctrl →)"><Icon name="next" size={16} /></button>
       <button class="ic wide" class:on={player.repeat !== "off"} aria-pressed={player.repeat !== "off"} aria-label={repeatLabel} onclick={() => player.cycleRepeat()} title="{repeatLabel} (Ctrl R)">
@@ -103,7 +125,14 @@
     </div>
     <div class="time">
       <span>{A.fmtTime(player.positionMs)}</span>
-      <Slider value={player.progress} onchange={(v) => t && player.seekTo(v * t.duration_ms)} label="Progrés" valueText="{A.fmtTime(player.positionMs)} de {A.fmtTime(t?.duration_ms ?? 0)}" />
+      <Slider
+        value={player.progress}
+        onchange={(v) => t && player.seekTo(v * t.duration_ms)}
+        label="Progrés"
+        valueText="{A.fmtTime(player.positionMs)} de {A.fmtTime(t?.duration_ms ?? 0)}"
+        wavy={ona && !settings.light}
+        playing={player.playing}
+      />
       <span>{A.fmtTime(t?.duration_ms ?? 0)}</span>
     </div>
   </div>
@@ -227,6 +256,32 @@
   }
   .play:hover:not(:disabled) {
     transform: scale(1.06);
+  }
+
+  /* ---------- Estètica Ona ---------- */
+  :global(.ona) .bar {
+    margin: 0 var(--gap) var(--gap);
+    border-radius: 24px;
+    background: var(--base);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  :global(.ona) .play {
+    width: 42px;
+    height: 42px;
+    background: var(--accent);
+    color: #0b0a12;
+    transition:
+      transform var(--t-spring) var(--spring),
+      scale var(--t-spring) var(--spring),
+      background 0.6s;
+  }
+  .ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    opacity: 0;
+    pointer-events: none;
   }
   .time {
     width: 100%;

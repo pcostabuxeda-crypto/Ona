@@ -6,6 +6,12 @@
   import { ui } from "$lib/ui.svelte";
   import Cover from "./Cover.svelte";
   import Icon from "./Icon.svelte";
+  import Disc from "./Disc.svelte";
+  import Visualizer from "./Visualizer.svelte";
+  import { settings } from "$lib/settings.svelte";
+
+  // Estètica Ona: el disc gira al mig i el visualitzador fa un anell de llum al voltant.
+  const ona = $derived(settings.look === "ona");
 
   let artist = $state<Collection | null>(null);
 
@@ -30,7 +36,16 @@
   </header>
 
   <div class="scroll">
-    <Cover src={t.album.image} size="100%" radius={8} />
+    {#if ona && settings.disc}
+      <div class="orbit">
+        {#if settings.viz && !settings.light}
+          <div class="viz"><Visualizer style="circular" shape="bars" colorA={player.palette.a} colorB={player.palette.b} inner={0.36} /></div>
+        {/if}
+        <Disc src={t.album.image} playing={player.playing} size="72cqi" />
+      </div>
+    {:else}
+      <Cover src={t.album.image} size="100%" radius={ona ? 18 : 8} />
+    {/if}
     <div class="title">
       <div class="txt">
         <h2>{t.name}</h2>
@@ -110,6 +125,7 @@
   .scroll {
     flex: 1;
     overflow-y: auto;
+    container-type: inline-size;
     padding: 0 16px 16px;
     display: flex;
     flex-direction: column;
@@ -118,6 +134,18 @@
   .scroll > :global(.cover) {
     aspect-ratio: 1;
     height: auto !important;
+  }
+  .orbit {
+    position: relative;
+    width: 100cqi;
+    height: 100cqi;
+    display: grid;
+    place-items: center;
+    flex: none;
+  }
+  .viz {
+    position: absolute;
+    inset: 0;
   }
   .title h2 {
     font-size: 24px;

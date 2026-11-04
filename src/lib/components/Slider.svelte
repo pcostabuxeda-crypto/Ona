@@ -1,6 +1,31 @@
+<script lang="ts" module>
+  // Ona (estètica Ona, de l'Ona 0.1): una sinusoide llarga dibuixada un sol cop; la barra en mostra un tros i la desplaça.
+  const WL = 26;
+  const AMP = 3.2;
+  const WAVE_D = (() => {
+    let d = `M 0 6`;
+    for (let x = 0; x < 2400; x += WL / 2) {
+      const dir = (x / (WL / 2)) % 2 === 0 ? -1 : 1;
+      const c = WL / 2 / 2.6;
+      d += ` C ${x + c} ${6 + dir * AMP * 1.3} ${x + WL / 2 - c} ${6 + dir * AMP * 1.3} ${x + WL / 2} 6`;
+    }
+    return d;
+  })();
+</script>
+
 <script lang="ts">
-  /** Barra prima de Spotify: blanca, verda en passar-hi per sobre, amb el botó rodó visible només aleshores. */
-  let { value, onchange, label, valueText }: { value: number; onchange: (v: number) => void; label: string; valueText?: string } = $props();
+  /**
+   * Barra prima de Spotify: blanca, verda en passar-hi per sobre, amb el botó rodó visible només aleshores.
+   * Amb `wavy` (estètica Ona): la part feta és una ona que avança mentre sona i es torna plana en pausa.
+   */
+  let {
+    value,
+    onchange,
+    label,
+    valueText,
+    wavy = false,
+    playing = false,
+  }: { value: number; onchange: (v: number) => void; label: string; valueText?: string; wavy?: boolean; playing?: boolean } = $props();
 
   let el: HTMLDivElement;
   let drag = $state<number | null>(null);
@@ -36,6 +61,8 @@
 
 <div
   class="slider"
+  class:wavy
+  class:waving={wavy && playing && drag === null}
   class:dragging={drag !== null}
   bind:this={el}
   role="slider"
@@ -50,7 +77,17 @@
   onpointerup={up}
   onkeydown={key}
 >
-  <div class="track"><div class="fill" style:width="{shown * 100}%"></div></div>
+  {#if wavy}
+    <div class="done" style:width="max(0px, calc({shown * 100}% - 5px))">
+      <svg class="wave" height="12" width="2400" aria-hidden="true">
+        <path d={WAVE_D} fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+      </svg>
+      <div class="flat"></div>
+    </div>
+    <div class="rest" style:left="min(100%, calc({shown * 100}% + 5px))"></div>
+  {:else}
+    <div class="track"><div class="fill" style:width="{shown * 100}%"></div></div>
+  {/if}
   <div class="knob" style:left="{shown * 100}%"></div>
 </div>
 
@@ -95,5 +132,88 @@
   .dragging .knob,
   .slider:focus-visible .knob {
     display: block;
+  }
+
+  /* ---------- Ona ---------- */
+  .wavy {
+    height: 22px;
+  }
+  .done {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    overflow: hidden;
+    color: var(--accent);
+  }
+  .wave,
+  .flat {
+    position: absolute;
+    top: 50%;
+    transition: opacity 0.25s;
+  }
+  .wave {
+    left: -26px;
+    margin-top: -6px;
+    opacity: 0;
+  }
+  .flat {
+    left: 0;
+    right: 0;
+    height: 3px;
+    margin-top: -1.5px;
+    border-radius: 99px;
+    background: currentColor;
+  }
+  .waving .wave {
+    opacity: 1;
+  }
+  .waving .flat {
+    opacity: 0;
+  }
+  /* Només es mou mentre sona: en pausa l'ona s'aplana i no hi ha cap animació en marxa.
+     Es mou l'<svg> sencer (capa del compositor), no el <path> (que es repintaria a cada fotograma). */
+  .waving .wave {
+    animation: travel 1.1s linear infinite;
+  }
+  @keyframes travel {
+    to {
+      transform: translateX(26px);
+    }
+  }
+  .rest {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    height: 3px;
+    margin-top: -1.5px;
+    border-radius: 99px;
+    background: rgb(255 255 255 / 0.16);
+  }
+  .wavy .knob {
+    display: block;
+    width: 5px;
+    height: 16px;
+    margin-left: -2.5px;
+    border-radius: 99px;
+    background: var(--accent);
+    box-shadow: none;
+    transition:
+      height 0.3s var(--spring),
+      width 0.3s var(--spring),
+      margin 0.3s var(--spring);
+  }
+  .wavy:hover .knob,
+  .wavy.dragging .knob {
+    height: 22px;
+  }
+  .wavy.dragging .knob {
+    width: 7px;
+    margin-left: -3.5px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .waving .wave {
+      animation: none;
+    }
   }
 </style>

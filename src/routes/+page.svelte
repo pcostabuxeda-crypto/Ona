@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import * as A from "$lib/api";
   import { player } from "$lib/player.svelte";
   import { ui } from "$lib/ui.svelte";
@@ -18,6 +19,8 @@
   import MiniLyrics from "$lib/components/MiniLyrics.svelte";
   import { toggleMini } from "$lib/mini.svelte";
   import { settings } from "$lib/settings.svelte";
+  import ThemeBackground from "$lib/components/ThemeBackground.svelte";
+  import Appearance from "$lib/components/Appearance.svelte";
 
   // La finestra de lletra flotant carrega la mateixa app amb ?mini: només hi mostra la lletra.
   const isMini = typeof location !== "undefined" && new URLSearchParams(location.search).has("mini");
@@ -34,6 +37,9 @@
 
   onMount(async () => {
     if (isMini) return;
+    // Minimitzada: les animacions es paren (WebView2 no marca la pàgina com a amagada).
+    const win = getCurrentWindow();
+    win.onResized(async () => document.documentElement.classList.toggle("app-hidden", await win.isMinimized()));
     const slowTimer = setTimeout(() => (slow = true), 8000);
     await player.init();
     try {
@@ -172,7 +178,8 @@
 {#if isMini}
   <MiniLyrics />
 {:else}
-<div class="app" class:liner={settings.liner}>
+<div class="app" class:liner={settings.look === "liner"} class:ona={settings.look === "ona"} style:--pb={player.palette.a}>
+  {#if settings.look === "ona"}<ThemeBackground />{/if}
   <TitleBar loggedIn={phase === "app"} onlogout={doLogout} />
 
   {#if phase === "boot"}
@@ -189,13 +196,13 @@
     <Login onlogin={doLogin} onfree={enterFree} {busy} {error} />
   {:else if phase === "app"}
     <div class="body" class:narrow>
-      <Sidebar collapsed={width < 900 || settings.liner} />
+      <Sidebar collapsed={width < 900 || settings.look === "liner"} />
       <main bind:this={scroller}>
         {#if ui.view.name === "home"}
           <Home />
         {:else if ui.view.name === "search"}
           <Search />
-        {:else if ui.view.name === "lyrics" && !settings.liner}
+        {:else if ui.view.name === "lyrics" && settings.look === "spotify"}
           <Lyrics />
         {:else if ui.view.name === "collection"}
           {#key ui.view}
@@ -214,10 +221,11 @@
       {/if}
     </div>
     <PlayerBar />
-    {#if ui.view.name === "lyrics" && settings.liner}<NowPlayingFull />{/if}
+    {#if ui.view.name === "lyrics" && settings.look !== "spotify"}<NowPlayingFull />{/if}
   {/if}
 
   <ContextMenu />
+  <Appearance />
 
   <!-- Regió viva permanent: si es creés amb el text, el lector de pantalla podria no anunciar-lo. -->
   <div class="toasts" role="status" aria-live="polite">
@@ -279,6 +287,10 @@
     width: min(360px, 88vw);
     box-shadow: -8px 0 24px rgb(0 0 0 / 0.5);
     animation: sheet-in var(--t-spring) var(--spring) both;
+  }
+  /* A l'estètica Ona els panells són de vidre: el full que tapa el contingut ha de ser opac. */
+  .ona .narrow :global(> aside.panel) {
+    background: #120f1b;
   }
   @keyframes sheet-in {
     from {

@@ -46,6 +46,48 @@
   --font-title: "Inter", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   font-family: var(--font);
 }
+/* Estètica Ona (preferència «look: ona»), hereva de l'Ona 0.1: panells de vidre (sense backdrop-filter,
+   només transparència) sobre un fons de tema viu, i l'accent el treu la portada (--pb). */
+.app.ona {
+  --bg: transparent;
+  --base: rgb(255 255 255 / 0.055);
+  --highlight: rgb(255 255 255 / 0.09);
+  --elevated: #17141f;
+  --elevated-hi: #221e2d;
+  --tinted: rgb(255 255 255 / 0.08);
+  --tinted-hi: rgb(255 255 255 / 0.14);
+  --text: #f3f1fa;
+  --text-2: rgb(243 241 250 / 0.66);
+  --text-3: rgb(243 241 250 / 0.42);
+  --line: rgb(255 255 255 / 0.09);
+  /* Accent de la portada, aclarit perquè es llegeixi sobre fosc. */
+  --accent: color-mix(in oklab, var(--pb, #8b7bff) 70%, white);
+  --gap: 10px;
+  --radius: 20px;
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-title: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  isolation: isolate;
+  font-family: var(--font);
+}
+.app.ona h1,
+.app.ona h2 {
+  letter-spacing: -0.03em;
+}
+/* Cada botó respon al dit: s'enfonsa una mica i torna amb molla (`scale` no xoca amb els `transform`). */
+.app.ona button:not(:disabled) {
+  transition: scale var(--t-spring) var(--spring);
+}
+.app.ona button:not(:disabled):active {
+  scale: 0.9;
+  transition-duration: 90ms;
+  transition-timing-function: ease-out;
+}
+/* Finestra minimitzada: totes les animacions CSS en pausa (WebView2 no marca la pàgina com a amagada). */
+.app-hidden *,
+.app-hidden *::before,
+.app-hidden *::after {
+  animation-play-state: paused !important;
+}
 html, body {
   margin: 0;
   height: 100%;

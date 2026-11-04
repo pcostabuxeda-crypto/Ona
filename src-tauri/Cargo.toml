@@ -29,6 +29,7 @@ base64 = "0.22"
 rand = "0.8"
 protobuf = "3"
 souvlaki = "0.8"
+rustfft = "6"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
