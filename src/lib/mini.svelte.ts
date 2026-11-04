@@ -5,7 +5,7 @@
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { player } from "./player.svelte";
-import { settings } from "./settings.svelte";
+import { settings, type Look } from "./settings.svelte";
 import { ui } from "./ui.svelte";
 
 export const MINI = "lyrics-mini";
@@ -21,7 +21,10 @@ export type MiniState = {
   at: number;
   playing: boolean;
   color: string;
+  /** Segon color de la portada (fons animat de l'estètica Ona). */
+  color2: string;
   light: boolean;
+  look: Look;
 };
 
 function state(): MiniState {
@@ -34,7 +37,9 @@ function state(): MiniState {
     at: Date.now(),
     playing: player.playing,
     color: player.palette.a,
+    color2: player.palette.b,
     light: settings.light,
+    look: settings.look,
   };
 }
 
@@ -48,6 +53,7 @@ function wire() {
       void player.epoch;
       void player.palette;
       void settings.light;
+      void settings.look;
       if (mini.open) emitTo(MINI, "mini:state", state()).catch(() => {});
     });
   });

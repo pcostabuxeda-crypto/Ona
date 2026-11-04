@@ -11,8 +11,8 @@
   import * as A from "$lib/api";
   import type { MiniState } from "$lib/mini.svelte";
   import Icon from "./Icon.svelte";
+  import { estimateWords, type Word } from "$lib/karaoke";
 
-  type Word = { t: number; text: string };
   type Line = { t: number; text: string; words?: Word[] };
 
   const win = getCurrentWindow();
@@ -46,7 +46,9 @@
             return;
           } catch {}
         }
-        lines = (l?.lines ?? []).filter((x) => x.text.trim()).map((x) => ({ t: x.t, text: x.text }));
+        const ls = (l?.lines ?? []).filter((x) => x.text.trim());
+        // Sense temps per paraula: s'estimen, perquè la lletra també reaccioni paraula a paraula.
+        lines = ls.map((x, i) => ({ t: x.t, text: x.text, words: synced ? estimateWords(x.text, x.t, ls[i + 1]?.t) : undefined }));
       })
       .catch(() => t.id === lastId && (lines = []));
   });
@@ -57,6 +59,18 @@
     for (let i = 0; i < lines.length && lines[i].t <= now + 250; i++) ans = i;
     return Math.max(0, ans);
   });
+
+  const look = $derived(st?.look ?? "spotify");
+  /** Última paraula que ja s'ha començat a cantar (la que brilla). */
+  const singing = $derived.by(() => {
+    const ws = lines?.[active]?.words;
+    if (!ws) return -1;
+    let k = -1;
+    for (let i = 0; i < ws.length && ws[i].t <= now + 250; i++) k = i;
+    return k;
+  });
+  /** Durada de la línia i quant fa que ha començat (per a la barreta que s'omple). */
+  const lineMs = $derived(lines?.[active] ? Math.max(500, (lines[active + 1]?.t ?? lines[active].t + 4000) - lines[active].t) : 0);
 
   // Rellotge: dorm fins al pròxim canvi (línia o paraula); res mentre està en pausa.
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -108,7 +122,16 @@
 
 <svelte:window onkeydown={(e) => e.key === "Escape" && win.close()} />
 
-<div class="mini" data-tauri-drag-region style:--pa={st?.color ?? "#333"} style:--k={scale}>
+<div
+  class="mini {look}"
+  class:paused={!st?.playing}
+  data-tauri-drag-region
+  style:--pa={st?.color ?? "#333"}
+  style:--pb={st?.color2 ?? "#222"}
+  style:--k={scale}
+>
+  <!-- Les taques giren un tros a cada línia nova (amb molla): reaccionen a la cançó i no gasten entre línies. -->
+  {#if look === "ona"}<div class="blobs" aria-hidden="true" style:rotate="{active * 47}deg"></div>{/if}
   {#if !st?.track}
     <p class="msg" data-tauri-drag-region>No sona res.</p>
   {:else if lines === null}
@@ -120,12 +143,16 @@
       {#key active}
         <p class="cur" data-tauri-drag-region>
           {#if lines[active].words}
-            {#each lines[active].words ?? [] as w, i (i)}<span class:sung={w.t <= now + 250}>{w.text}</span>{/each}
+            {#each lines[active].words ?? [] as w, i (i)}<span class:sung={i <= singing} class:now={i === singing}>{w.text}</span>{/each}
           {:else}
             {lines[active].text}
           {/if}
         </p>
         {#if synced && lines[active + 1]}<p class="next" data-tauri-drag-region>{lines[active + 1].text}</p>{/if}
+        {#if synced && look !== "spotify"}
+          <!-- S'omple al llarg de la línia (compositor: scaleX); comença on toca si s'obre a mitja línia. -->
+          <i class="lbar" aria-hidden="true" style:animation-duration="{lineMs}ms" style:animation-delay="{-Math.max(0, now - lines[active].t)}ms"></i>
+        {/if}
       {/key}
     </div>
   {/if}
@@ -239,5 +266,97 @@
   }
   .sp {
     flex: 1;
+  }
+
+  /* ---------- Ona i Liner: cada paraula s'aixeca i s'encén quan toca ---------- */
+  .ona .cur span,
+  .liner .cur span {
+    display: inline-block;
+    white-space: pre;
+    opacity: 0.38;
+    color: #fff;
+    transition:
+      opacity 0.35s ease-out,
+      transform 0.6s var(--spring);
+  }
+  .ona .cur span.sung,
+  .liner .cur span.sung {
+    opacity: 1;
+  }
+  .ona .cur span.now,
+  .liner .cur span.now {
+    transform: translateY(-0.08em) scale(1.06);
+  }
+  .ona .cur span.now {
+    color: color-mix(in oklab, var(--pa) 45%, white);
+    text-shadow: 0 0 18px color-mix(in srgb, var(--pa) 70%, transparent);
+  }
+  .lbar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -8px;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+    color: #fff;
+    opacity: 0.5;
+    transform-origin: left;
+    animation: fillbar linear both;
+  }
+  .ona .lbar {
+    color: color-mix(in oklab, var(--pa) 50%, white);
+    opacity: 0.8;
+  }
+  @keyframes fillbar {
+    from {
+      transform: scaleX(0);
+    }
+  }
+  .paused .lbar {
+    animation-play-state: paused;
+  }
+  /* Ona: fons de vidre fosc amb dues taques de color de la portada que giren a poc a poc. */
+  .mini.ona {
+    border-radius: 18px;
+    background: #0d0b14;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  }
+  .blobs {
+    position: absolute;
+    inset: -60%;
+    background:
+      radial-gradient(closest-side at 30% 40%, color-mix(in oklab, var(--pa) 80%, white 8%), transparent),
+      radial-gradient(closest-side at 70% 60%, color-mix(in oklab, var(--pb) 75%, white 6%), transparent);
+    opacity: 0.85;
+    transition: rotate 1.6s var(--spring-soft);
+    pointer-events: none;
+  }
+  .ona .lines,
+  .ona .msg {
+    position: relative;
+    z-index: 1;
+  }
+  .ona .tools {
+    z-index: 1;
+  }
+  .liner {
+    border-radius: 16px;
+    background: #050506;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
+  }
+  .liner .next {
+    color: #a1a1a8;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lbar {
+      animation: none;
+    }
+    .blobs {
+      transition: none;
+    }
+    .cur span {
+      transition: none !important;
+    }
   }
 </style>
