@@ -10,7 +10,8 @@
   import { player } from "$lib/player.svelte";
   import { settings } from "$lib/settings.svelte";
 
-  let { inset = "40px", dark = false }: { inset?: string; dark?: boolean } = $props();
+  /** `space`: mode espai — sense fons propi (es veu el Cosmos) i les línies arriben des del fons. */
+  let { inset = "40px", dark = false, space = false }: { inset?: string; dark?: boolean; space?: boolean } = $props();
 
   const LEAD_MS = 250;
   const memo = new Map<string, Lyrics>();
@@ -69,10 +70,10 @@
 
 {#if rich && lyrics}
   {#key player.current?.id}
-    <RichLyrics {lyrics} {inset} {dark} />
+    <RichLyrics {lyrics} {inset} {dark} {space} />
   {/key}
 {:else}
-  <section class="lyrics" class:dark style:--bg={player.palette.a} style:--inset={inset} bind:this={box}>
+  <section class="lyrics" class:dark class:space style:--bg={player.palette.a} style:--inset={inset} bind:this={box}>
     {#if !player.current}
       <p class="msg">Posa alguna cançó.</p>
     {:else if lyrics === undefined}
@@ -113,6 +114,9 @@
   }
   .dark {
     background: radial-gradient(circle at 30% 40%, color-mix(in srgb, var(--bg) 45%, #000), #0a0a0b 75%);
+  }
+  .lyrics.space {
+    background: transparent;
   }
   .dark .line.future {
     color: rgb(255 255 255 / 0.3);

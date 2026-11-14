@@ -18,9 +18,17 @@
   import NowPlayingFull from "$lib/components/NowPlayingFull.svelte";
   import MiniLyrics from "$lib/components/MiniLyrics.svelte";
   import { toggleMini } from "$lib/mini.svelte";
-  import { settings } from "$lib/settings.svelte";
+  import { settings, space } from "$lib/settings.svelte";
   import ThemeBackground from "$lib/components/ThemeBackground.svelte";
   import Appearance from "$lib/components/Appearance.svelte";
+
+  // Estrelles de l'enlairament: al voltant del centre (vmax), es pinten un cop i només s'escala la capa.
+  const CONVERGE = Array.from({ length: 110 }, () => {
+    const a = Math.random() * Math.PI * 2;
+    const r = 8 + Math.random() * 55;
+    const s = Math.random() < 0.2 ? 1.5 : 0.75;
+    return `${(Math.cos(a) * r).toFixed(2)}vmax ${(Math.sin(a) * r).toFixed(2)}vmax 0 ${s}px rgb(255 255 255 / ${(0.5 + Math.random() * 0.5).toFixed(2)})`;
+  }).join(",");
 
   // La finestra de lletra flotant carrega la mateixa app amb ?mini: només hi mostra la lletra.
   const isMini = typeof location !== "undefined" && new URLSearchParams(location.search).has("mini");
@@ -41,16 +49,21 @@
     const win = getCurrentWindow();
     win.onResized(async () => document.documentElement.classList.toggle("app-hidden", await win.isMinimized()));
     const slowTimer = setTimeout(() => (slow = true), 8000);
+    // Que l'enlairament es vegi sencer (estrelles que s'ajunten + l'ona que s'encén), però no més.
+    const liftoff = settings.look === "ona" && !settings.light && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const shown = new Promise((r) => setTimeout(r, liftoff ? 1500 : 0));
     await player.init();
     try {
       const user = await A.restore();
       clearTimeout(slowTimer);
+      await shown;
       if (user) return enter();
     } catch (e) {
       error = loginError(e);
       expired = String(e).includes("session_expired");
     }
     clearTimeout(slowTimer);
+    await shown;
     if (freeSaved() && !expired) return enterFree();
     phase = "login";
   });
@@ -178,12 +191,22 @@
 {#if isMini}
   <MiniLyrics />
 {:else}
-<div class="app" class:liner={settings.look === "liner"} class:ona={settings.look === "ona"} style:--pb={player.palette.a}>
+<div
+  class="app"
+  class:liner={settings.look === "liner"}
+  class:ona={settings.look === "ona"}
+  class:fsopen={phase === "app" && ui.view.name === "lyrics" && space()}
+  style:--pb={player.palette.a}
+>
   {#if settings.look === "ona"}<ThemeBackground />{/if}
   <TitleBar loggedIn={phase === "app"} onlogout={doLogout} />
 
   {#if phase === "boot"}
-    <div class="boot" data-tauri-drag-region>
+    <div class="boot" class:liftoff={settings.look === "ona" && !settings.light} data-tauri-drag-region>
+      {#if settings.look === "ona" && !settings.light}
+        <!-- Enlairament: les estrelles de tot el cel s'ajunten on naixerà l'ona. -->
+        <span class="converge" style:box-shadow={CONVERGE} aria-hidden="true"></span>
+      {/if}
       <svg width="88" height="56" viewBox="0 0 44 28" aria-hidden="true">
         <path class="wave" d="M2 14c5-10 10-10 15 0s10 10 15 0 7-8 10-6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
       </svg>
@@ -353,10 +376,62 @@
       stroke-dashoffset: 0;
     }
   }
+  .boot.liftoff {
+    position: relative;
+    overflow: hidden;
+  }
+  .converge {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 1px;
+    height: 1px;
+    border-radius: 50%;
+    animation: converge 1300ms cubic-bezier(0.55, 0, 0.2, 1) both;
+  }
+  @keyframes converge {
+    from {
+      scale: 2.6;
+      opacity: 0;
+    }
+    35% {
+      opacity: 1;
+    }
+    to {
+      scale: 0.05;
+      opacity: 0;
+    }
+  }
+  /* L'ona neix quan les estrelles ja s'han ajuntat, amb un esclat de llum. */
+  .liftoff svg {
+    animation: ignite 900ms 900ms var(--spring) backwards;
+    filter: drop-shadow(0 0 14px var(--accent));
+  }
+  .liftoff .wave {
+    animation-delay: 900ms;
+  }
+  @keyframes ignite {
+    from {
+      scale: 0.3;
+      opacity: 0;
+    }
+  }
+  /* Lletra a pantalla completa en mode espai: la resta de l'app no es pinta (el Cosmos es veu a través). */
+  .fsopen > :global(header.bar),
+  .fsopen > .body,
+  .fsopen > :global(footer.bar) {
+    visibility: hidden;
+  }
   @media (prefers-reduced-motion: reduce) {
     .wave {
       animation: none;
       stroke-dashoffset: 0;
+    }
+    .converge {
+      display: none;
+    }
+    .liftoff svg {
+      animation: none;
     }
   }
   .boot .free {

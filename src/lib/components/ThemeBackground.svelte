@@ -55,6 +55,7 @@
   import { settings } from "$lib/settings.svelte";
   import { themeById } from "$lib/themes";
   import { ui } from "$lib/ui.svelte";
+  import { onFrame, useSpectrum } from "$lib/viz.svelte";
 
   const theme = $derived(themeById(settings.theme));
   const image = $derived(theme.id === "cover" ? (player.current?.album.thumb ?? null) : null);
@@ -78,6 +79,38 @@
       ],
       { duration: 900, easing: "ease-out" },
     );
+  });
+
+  // El viatge segueix la música: amb els greus, les estrelles acceleren; a cada cop fort, una empenta.
+  // Només mentre sona i amb el visualitzador activat (fa servir el mateix espectre del Rust).
+  $effect(() => {
+    const w = warp;
+    if (fx !== "warp" || !settings.viz || !player.playing || !w) return;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const anims = [...w.querySelectorAll(".layer")].flatMap((l) => l.getAnimations());
+    const leave = useSpectrum();
+    let rate = 1;
+    let avg = 0.2;
+    let lastKick = 0;
+    const off = onFrame((bass) => {
+      const next = rate + (1 + bass * 5 - rate) * 0.2;
+      // Només es toca l'animació si el canvi es nota: cada canvi es torna a enviar al compositor.
+      if (Math.abs(next - rate) > 0.03) {
+        rate = next;
+        for (const a of anims) a.playbackRate = rate;
+      }
+      avg += (bass - avg) * 0.05;
+      const now = performance.now();
+      if (bass > 0.25 && bass > avg * 1.35 && now - lastKick > 380) {
+        lastKick = now;
+        w.animate([{ scale: 1 }, { scale: 1.045 }, { scale: 1 }], { duration: 360, easing: "ease-out" });
+      }
+    });
+    return () => {
+      off();
+      leave();
+      for (const a of anims) a.playbackRate = 1;
+    };
   });
 </script>
 

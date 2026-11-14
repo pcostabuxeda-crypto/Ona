@@ -39,6 +39,9 @@ function load(): Settings {
 
 export const settings = $state<Settings>(load());
 
+/** Mode espai: estètica Ona amb l'efecte «Viatge» i sense mode lleuger (planeta, lletra des del fons…). */
+export const space = () => settings.look === "ona" && settings.effect === "warp" && !settings.light;
+
 export function setSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
   settings[key] = value;
   try {

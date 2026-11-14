@@ -15,7 +15,31 @@
   import { player } from "$lib/player.svelte";
 
   /** `inset`: marge esquerre per a la columna de la pantalla completa; `dark`: vel més fosc (estètica Liner). */
-  let { lyrics, inset = "40px", dark = false }: { lyrics: NonNullable<Lyrics>; inset?: string; dark?: boolean } = $props();
+  /** `space`: mode espai — sense fons fluid (es veu el Cosmos) i cada línia arriba des del fons. */
+  let {
+    lyrics,
+    inset = "40px",
+    dark = false,
+    space = false,
+  }: { lyrics: NonNullable<Lyrics>; inset?: string; dark?: boolean; space?: boolean } = $props();
+
+  // Línies en profunditat: les que vindran esperen petites i lluny, l'activa arriba amb molla i
+  // les passades s'allunyen per darrere. Només transicions de `transform`/`opacity` en canviar de línia.
+  const DEPTH = `
+      .blyrics-container > div {
+        transition: transform 700ms var(--spring-soft), opacity 500ms ease;
+      }
+      .blyrics-container > div.blyrics--active {
+        --blyrics-scale: 1;
+      }
+      .blyrics-container > div.blyrics--active ~ div {
+        --blyrics-scale: 0.9;
+        opacity: 0.55;
+      }
+      .blyrics-container > div:has(~ div.blyrics--active) {
+        --blyrics-scale: 1.04;
+        opacity: 0.3;
+      }`;
 
   let canvas: HTMLCanvasElement;
   let view: HTMLElement & { lyrics: Lyric[] | null; currentTime: number; playing: boolean; theme: string; renderer?: { noteUserScroll(): void } | null };
@@ -72,9 +96,10 @@
         --blyrics-active-scale: 1;
         font-family: var(--font-title);
         font-weight: 700;
-      }`;
+      }${space ? DEPTH : ""}`;
     try {
-      kawarp = new Kawarp(canvas, { blurPasses: 6, animationSpeed: 0.6, saturation: 1.3 });
+      // Mode espai: el fons és el Cosmos, no cal el fons fluid (ni la GPU que gasta).
+      kawarp = space ? null : new Kawarp(canvas, { blurPasses: 6, animationSpeed: 0.6, saturation: 1.3 });
     } catch {
       kawarp = null; // sense WebGL: es queda el color de fons
     }
@@ -121,7 +146,7 @@
   });
 </script>
 
-<div class="rich" class:dark style:--bg={player.palette.a} style:--inset={inset}>
+<div class="rich" class:dark class:space style:--bg={player.palette.a} style:--inset={inset}>
   <canvas bind:this={canvas}></canvas>
   <braccato-lyrics bind:this={view} onwheel={() => view.renderer?.noteUserScroll()}></braccato-lyrics>
   <p class="src">Lletra: {lyrics.source}{lyrics.ttml ? " · betterlyrics.org" : ""}</p>
@@ -150,6 +175,13 @@
   }
   .dark::after {
     background: radial-gradient(circle at 30% 40%, rgb(0 0 0 / 0.35), rgb(0 0 0 / 0.8));
+  }
+  /* Mode espai: el Cosmos es veu a través; només un vel suau perquè el text es llegeixi. */
+  .rich.space {
+    background: transparent;
+  }
+  .space::after {
+    background: radial-gradient(ellipse at 70% 45%, rgb(3 2 8 / 0.45), transparent 70%);
   }
   braccato-lyrics {
     position: relative;
