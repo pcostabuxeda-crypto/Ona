@@ -2,8 +2,8 @@
 const KEY = "ona.settings";
 
 export type Look = "spotify" | "liner" | "ona";
-export type ThemeId = "ona" | "galaxy" | "aurora" | "sunset" | "ocean" | "cover";
-export type Effect = "none" | "stars" | "bubbles";
+export type ThemeId = "cosmos" | "ona" | "galaxy" | "aurora" | "sunset" | "ocean" | "cover";
+export type Effect = "none" | "stars" | "bubbles" | "warp";
 
 type Settings = {
   /** Mode lleuger: lletra simple per línies i fons de color pla (sense WebGL ni animació per síl·laba). */
@@ -17,8 +17,8 @@ type Settings = {
   viz: boolean;
 };
 
-const THEMES: ThemeId[] = ["ona", "galaxy", "aurora", "sunset", "ocean", "cover"];
-const EFFECTS: Effect[] = ["none", "stars", "bubbles"];
+const THEMES: ThemeId[] = ["cosmos", "ona", "galaxy", "aurora", "sunset", "ocean", "cover"];
+const EFFECTS: Effect[] = ["none", "stars", "bubbles", "warp"];
 
 function load(): Settings {
   let s: Record<string, unknown> = {};

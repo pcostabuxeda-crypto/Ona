@@ -198,17 +198,20 @@
     <div class="body" class:narrow>
       <Sidebar collapsed={width < 900 || settings.look === "liner"} />
       <main bind:this={scroller}>
-        {#if ui.view.name === "home"}
-          <Home />
-        {:else if ui.view.name === "search"}
-          <Search />
-        {:else if ui.view.name === "lyrics" && settings.look === "spotify"}
-          <Lyrics />
-        {:else if ui.view.name === "collection"}
-          {#key ui.view}
-            <CollectionView kind={ui.view.kind} id={ui.view.id} {scroller} />
-          {/key}
-        {/if}
+        <!-- Cada vista nova arriba des del fons de l'espai (o, enrere, des de darrere nostre). -->
+        {#key ui.view}
+          <div class="travel" class:back={ui.dir < 0} class:on={settings.look === "ona" && !settings.light}>
+            {#if ui.view.name === "home"}
+              <Home />
+            {:else if ui.view.name === "search"}
+              <Search />
+            {:else if ui.view.name === "lyrics" && settings.look === "spotify"}
+              <Lyrics />
+            {:else if ui.view.name === "collection"}
+              <CollectionView kind={ui.view.kind} id={ui.view.id} {scroller} />
+            {/if}
+          </div>
+        {/key}
       </main>
       {#if narrow && ui.panel && (ui.panel === "queue" || player.current)}
         <!-- Fons enfosquit només amb opacitat (sense backdrop-filter): clicar-lo tanca el panell. -->
@@ -272,6 +275,27 @@
     overflow-x: hidden;
     /* Les vistes s'adapten a l'amplada real del contingut (amb panells oberts o no), no a la finestra. */
     container-type: inline-size;
+  }
+  .travel.on {
+    /* `backwards`: en acabar no queda cap `scale` que faci de bloc contenidor dels `fixed`/`sticky`. */
+    animation: travel-in var(--t-spring) var(--spring-soft) backwards;
+    transform-origin: 50% 30%;
+  }
+  .travel.on.back {
+    animation-name: travel-back;
+  }
+  @keyframes travel-in {
+    from {
+      opacity: 0;
+      scale: 0.9;
+      translate: 0 18px;
+    }
+  }
+  @keyframes travel-back {
+    from {
+      opacity: 0;
+      scale: 1.08;
+    }
   }
   .body :global(> aside.panel) {
     width: 280px;

@@ -13,6 +13,15 @@ export type Theme = {
 
 export const THEMES: Theme[] = [
   {
+    // Viatge per l'espai: nebuloses tenyides pel color de la portada sobre negre profund.
+    id: "cosmos",
+    name: "Cosmos",
+    background:
+      "radial-gradient(55% 45% at 78% 18%, color-mix(in oklab, var(--pb) 38%, transparent), transparent 70%), radial-gradient(50% 50% at 12% 88%, #3b1a8a88, transparent 70%), radial-gradient(40% 35% at 40% 55%, #0e3b6b55, transparent 75%), #030208",
+    accent: null,
+    effect: "warp",
+  },
+  {
     id: "ona",
     name: "Ona",
     background: "radial-gradient(1200px 600px at 100% 0%, color-mix(in oklab, var(--pb) 10%, transparent), transparent), #09090f",

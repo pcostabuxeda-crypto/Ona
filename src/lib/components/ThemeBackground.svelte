@@ -18,6 +18,26 @@
     delay: i * 3.1 + Math.random() * 2,
     dur: 9 + Math.random() * 6,
   }));
+  // Viatge: estrelles al voltant del centre (offsets en vmax) que s'acosten escalant la capa sencera.
+  function starsAround(count: number, size: number) {
+    const out: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const x = ((Math.random() - 0.5) * 120).toFixed(2);
+      const y = ((Math.random() - 0.5) * 120).toFixed(2);
+      const a = (0.4 + Math.random() * 0.6).toFixed(2);
+      out.push(`${x}vmax ${y}vmax 0 ${size / 2}px rgb(255 255 255 / ${a})`);
+    }
+    return out.join(",");
+  }
+  // Tres profunditats; cada una amb dues fases desfasades mitja volta perquè el flux no tingui forats.
+  const DEPTHS = [
+    { count: 90, size: 1, dur: 60 },
+    { count: 45, size: 1.5, dur: 40 },
+    { count: 18, size: 2.5, dur: 26 },
+  ];
+  const WARP = DEPTHS.flatMap((d) =>
+    [0, 0.5].map((phase) => ({ shadow: starsAround(d.count, d.size), size: d.size, dur: d.dur, delay: -d.dur * (phase + Math.random() * 0.2) })),
+  );
   const BUBBLES = Array.from({ length: 14 }, () => ({
     left: Math.random() * 100,
     size: 10 + Math.random() * 46,
@@ -34,10 +54,31 @@
   import { player } from "$lib/player.svelte";
   import { settings } from "$lib/settings.svelte";
   import { themeById } from "$lib/themes";
+  import { ui } from "$lib/ui.svelte";
 
   const theme = $derived(themeById(settings.theme));
   const image = $derived(theme.id === "cover" ? (player.current?.album.thumb ?? null) : null);
-  const effect = $derived(settings.light ? "none" : settings.effect);
+  const fx = $derived(settings.light ? "none" : settings.effect);
+
+  // Salt per l'hiperespai en canviar de cançó o de vista: un sol cop, amb WAAPI (compositor).
+  let warp = $state<HTMLElement>();
+  let rays = $state<HTMLElement>();
+  let first = true;
+  $effect(() => {
+    void player.current?.uri;
+    void ui.view;
+    if (first) return void (first = false);
+    if (!warp || !rays || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    warp.animate([{ scale: 1 }, { scale: 1.45, offset: 0.3 }, { scale: 1 }], { duration: 1100, easing: "cubic-bezier(.2,.7,.2,1)" });
+    rays.animate(
+      [
+        { opacity: 0, scale: 0.6 },
+        { opacity: 0.55, offset: 0.25 },
+        { opacity: 0, scale: 1.5 },
+      ],
+      { duration: 900, easing: "ease-out" },
+    );
+  });
 </script>
 
 <div class="themebg" aria-hidden="true" style:background={theme.background}>
@@ -47,13 +88,23 @@
     {/key}
   {/if}
 
-  {#if effect === "stars"}
+  {#if fx === "stars"}
     <div class="stars small" style:box-shadow={SMALL}></div>
     <div class="stars big" style:box-shadow={BIG}></div>
     {#each SHOOTERS as s, i (i)}
       <span class="shooter" style:top="{s.top}%" style:left="{s.left}%" style:animation-delay="{s.delay}s" style:animation-duration="{s.dur}s"></span>
     {/each}
-  {:else if effect === "bubbles"}
+  {:else if fx === "warp"}
+    <div class="nebula"></div>
+    <div class="warp" bind:this={warp}>
+      {#each WARP as l, i (i)}
+        <div class="layer" style:animation-duration="{l.dur}s" style:animation-delay="{l.delay}s">
+          <span class="dots" style:width="{l.size}px" style:height="{l.size}px" style:box-shadow={l.shadow}></span>
+        </div>
+      {/each}
+    </div>
+    <div class="rays" bind:this={rays}></div>
+  {:else if fx === "bubbles"}
     {#each BUBBLES as b, i (i)}
       <span
         class="bubble"
@@ -165,11 +216,71 @@
       transform: translateY(-115vh) translateX(30px);
     }
   }
+  /* Nebulosa tenyida per la portada que gira molt a poc a poc (un sol element, compositor). */
+  .nebula {
+    position: absolute;
+    inset: -30%;
+    background:
+      radial-gradient(30% 22% at 35% 40%, color-mix(in oklab, var(--pb, #8b7bff) 22%, transparent), transparent 70%),
+      radial-gradient(26% 20% at 68% 62%, #7a2bd133, transparent 70%);
+    animation: nebula 140s linear infinite;
+  }
+  @keyframes nebula {
+    to {
+      rotate: 360deg;
+    }
+  }
+  .warp {
+    position: absolute;
+    inset: 0;
+  }
+  .layer {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    animation: approach linear infinite;
+  }
+  .dots {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    border-radius: 50%;
+  }
+  /* Neix petita i transparent al fons, creix cap a nosaltres i s'esvaeix abans de passar de llarg. */
+  @keyframes approach {
+    from {
+      scale: 0.35;
+      opacity: 0;
+    }
+    30% {
+      opacity: 1;
+    }
+    85% {
+      opacity: 1;
+    }
+    to {
+      scale: 1.9;
+      opacity: 0;
+    }
+  }
+  /* Raigs de l'hiperespai: línies fines que surten del centre, només visibles durant el salt. */
+  .rays {
+    position: absolute;
+    inset: -20%;
+    opacity: 0;
+    background: repeating-conic-gradient(from 0deg, rgb(255 255 255 / 0.5) 0deg 0.35deg, transparent 0.35deg 7deg);
+    mask: radial-gradient(circle, transparent 8%, #000 30%, transparent 70%);
+  }
   @media (prefers-reduced-motion: reduce) {
+    .nebula,
+    .layer,
     .stars.big,
     .shooter,
     .bubble {
       animation: none;
+    }
+    .layer {
+      opacity: 0.8;
     }
   }
 </style>
