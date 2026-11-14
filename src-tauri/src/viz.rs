@@ -14,6 +14,7 @@ use librespot::playback::{
     audio_backend::{Sink, SinkResult},
     convert::Converter,
     decoder::AudioPacket,
+    mixer::VolumeGetter,
 };
 use rustfft::{num_complex::Complex, FftPlanner};
 use tauri::{AppHandle, Emitter, Manager};
@@ -39,6 +40,8 @@ struct Ring {
 pub struct VizSink {
     pub inner: Box<dyn Sink>,
     pub shared: Arc<VizShared>,
+    /// Volum del mesclador: les mostres ja arriben atenuades i l'espectre ha de ser el mateix a qualsevol volum.
+    pub volume: Box<dyn VolumeGetter + Send>,
 }
 
 impl Sink for VizSink {
@@ -53,9 +56,11 @@ impl Sink for VizSink {
     fn write(&mut self, packet: AudioPacket, converter: &mut Converter) -> SinkResult<()> {
         if self.shared.enabled.load(Ordering::Relaxed) {
             if let Ok(samples) = packet.samples() {
+                // Desfà l'atenuació del volum (amb un límit perquè a volum 0 no es dispari el soroll).
+                let gain = 0.5 / self.volume.attenuation_factor().max(0.02);
                 let mut ring = self.shared.ring.lock().unwrap();
                 for pair in samples.as_chunks::<2>().0 {
-                    ring.samples.push_back(((pair[0] + pair[1]) * 0.5) as f32);
+                    ring.samples.push_back(((pair[0] + pair[1]) * gain) as f32);
                 }
                 let excess = ring.samples.len().saturating_sub(FFT_SIZE * 2);
                 ring.samples.drain(..excess);

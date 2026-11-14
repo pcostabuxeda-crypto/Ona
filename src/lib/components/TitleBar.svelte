@@ -174,7 +174,8 @@
   .win {
     display: flex;
     align-self: stretch;
-    margin-left: 8px;
+    /* Sempre a la dreta, també a l'arrencada i al login (quan no hi ha res més a la barra). */
+    margin-left: auto;
   }
   .win button {
     width: 46px;

@@ -145,6 +145,13 @@
   // Com el client: amb la finestra estreta, el panell de la dreta flota per sobre.
   const narrow = $derived(width < 1000);
 
+  // En estrènyer la finestra, el panell obert passaria a tapar-ho tot: es tanca (es torna a obrir amb un clic).
+  let wasNarrow = false;
+  $effect(() => {
+    if (narrow && !wasNarrow && phase === "app") ui.panel = null;
+    wasNarrow = narrow;
+  });
+
   /** Dreceres amb Ctrl (també funcionen amb el focus en un botó). */
   const ctrlKeys: Record<string, () => void> = {
     l: () => player.current && ui.toggleLyrics(),

@@ -142,9 +142,10 @@ impl Ona {
         };
         let backend = audio_backend::find(None).ok_or("No hi ha cap sortida d'àudio")?;
         let viz = self.viz.clone();
+        let mixer = self.mixer.clone();
         Ok(Player::new(config, session, self.mixer.get_soft_volume(), move || {
             // El visualitzador copia les mostres de camí a la sortida (només si està encès).
-            Box::new(viz::VizSink { inner: backend(None, AudioFormat::default()), shared: viz })
+            Box::new(viz::VizSink { inner: backend(None, AudioFormat::default()), shared: viz, volume: mixer.get_soft_volume() })
         }))
     }
 

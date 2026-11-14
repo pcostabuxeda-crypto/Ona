@@ -34,7 +34,7 @@
       }
       .blyrics-container > div.blyrics--active ~ div {
         --blyrics-scale: 0.9;
-        opacity: 0.55;
+        opacity: 0.8;
       }
       .blyrics-container > div:has(~ div.blyrics--active) {
         --blyrics-scale: 1.04;
