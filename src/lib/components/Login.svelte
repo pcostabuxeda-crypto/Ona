@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { settings } from "$lib/settings.svelte";
   /** Entrada amb el compte de Spotify al navegador (la sessió és la de librespot: no cal cap Client ID). */
   let { onlogin, onfree, busy, error }: { onlogin: () => void; onfree: () => void; busy: boolean; error: string } = $props();
 </script>
 
 <section class="login" data-tauri-drag-region>
-  <div class="box">
+  <div class="box" class:still={settings.light}>
     <svg width="48" height="48" viewBox="0 0 24 24" aria-hidden="true">
       <path fill="#fff" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20m4.6 14.4a.6.6 0 0 1-.9.2c-2.4-1.4-5.3-1.8-8.8-1a.6.6 0 1 1-.3-1.2c3.8-.9 7-.5 9.7 1.1.3.2.4.6.3.9m1.2-2.7a.8.8 0 0 1-1 .3c-2.7-1.7-6.9-2.2-10.2-1.2a.8.8 0 0 1-.4-1.5c3.7-1.1 8.3-.6 11.4 1.4.3.2.4.7.2 1m.1-2.8C14.7 9 9.4 8.8 6.3 9.7a.9.9 0 1 1-.5-1.8C9.3 6.9 15.2 7.1 18.9 9.3a.9.9 0 0 1-1 1.6" />
     </svg>
@@ -14,7 +15,7 @@
     {#if busy}<button class="retry" onclick={onlogin}>Torna a obrir el navegador</button>{/if}
     <button class="free" onclick={onfree}>Continua sense Spotify</button>
     <p class="muted small">Sense compte: música lliure d'Audius i els fitxers de la teva carpeta Música.</p>
-    {#if error}<p class="err">{error}</p>{/if}
+    {#if error}<p class="err" role="alert">{error}</p>{/if}
   </div>
 </section>
 
@@ -36,6 +37,28 @@
     gap: 16px;
     text-align: center;
   }
+  /* Cada peça arriba una rere l'altra amb molla. */
+  .box > :global(*) {
+    animation: rise var(--t-spring) var(--spring) both;
+  }
+  .box > :global(:nth-child(2)) {
+    animation-delay: 60ms;
+  }
+  .box > :global(:nth-child(3)) {
+    animation-delay: 120ms;
+  }
+  .box > :global(:nth-child(n + 4)) {
+    animation-delay: 180ms;
+  }
+  .still > :global(*) {
+    animation: none;
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      translate: 0 14px;
+    }
+  }
   h1 {
     font-size: 32px;
     line-height: 1.15;
@@ -49,11 +72,14 @@
     color: #000;
     font-size: 16px;
     font-weight: 700;
-    transition: transform 0.1s, background 0.1s;
+    transition:
+      transform var(--t-spring) var(--spring),
+      background 0.1s;
   }
-  .go:hover:not(:disabled) {
+  .go:hover:not(:disabled),
+  .go:focus-visible {
     transform: scale(1.04);
-    background: #3be477;
+    background: color-mix(in oklab, var(--accent) 85%, white);
   }
   .go:disabled {
     opacity: 0.7;
@@ -69,8 +95,12 @@
     border-radius: 999px;
     border: 1px solid #727272;
     font-weight: 700;
+    transition:
+      transform var(--t-spring) var(--spring),
+      border-color 0.1s;
   }
-  .free:hover {
+  .free:hover,
+  .free:focus-visible {
     border-color: #fff;
     transform: scale(1.04);
   }
