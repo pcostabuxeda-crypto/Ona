@@ -88,7 +88,7 @@
         {#if TILES[kind]}
           <div class="liked" style:background={TILES[kind]?.bg}><Icon name={TILES[kind]?.icon ?? ""} size={80} /></div>
         {:else}
-          <Cover src={data.info.image} size={232} radius={4} />
+          <Cover src={data.info.image} size={232} radius={4} tilt />
         {/if}
         <div class="meta">
           <span class="label">{label}</span>

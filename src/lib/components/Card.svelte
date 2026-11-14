@@ -6,6 +6,7 @@
   import { TILES } from "$lib/tiles";
   import { player } from "$lib/player.svelte";
   import { ui } from "$lib/ui.svelte";
+  import { tilt } from "$lib/motion";
   import { settings } from "$lib/settings.svelte";
   import Cover from "./Cover.svelte";
   import Icon from "./Icon.svelte";
@@ -26,12 +27,12 @@
   }
 </script>
 
-<div class="card" class:still={settings.light} style:--i={index} role="button" tabindex="0" onclick={open} onkeydown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open())}>
+<div class="card" class:still={settings.light} style:--i={index} use:tilt role="button" tabindex="0" onclick={open} onkeydown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open())}>
   <div class="art">
     {#if TILES[item.kind]}
       <div class="liked" style:background={TILES[item.kind]?.bg}><Icon name={TILES[item.kind]?.icon ?? ""} size={48} /></div>
     {:else}
-      <Cover src={item.image ?? covers[item.id]} size="100%" radius={6} round={item.kind === "artist"} />
+      <Cover src={item.image ?? covers[item.id]} size="100%" radius={6} round={item.kind === "artist"} tilt="inherit" />
     {/if}
     <!-- L'embolcall fa l'aparició; el botó conserva el seu hover i el «clic que s'enfonsa». -->
     <span class="fab"><button class="play-fab" onclick={play} title="Reprodueix" aria-label="Reprodueix {item.name}"><Icon name="play" size={24} /></button></span>

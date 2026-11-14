@@ -74,11 +74,14 @@
   <div class="now">
     {#if t}
       <button class="cover" onclick={() => ui.togglePanel("npv")} title="Ara sona" aria-label="Ara sona: {t.name}" class:dim={!!player.error}>
-        {#if ona && settings.disc}
-          <Disc src={t.album.thumb} playing={player.playing} size="56px" hole={false} />
-        {:else}
-          <Cover src={t.album.thumb} size={56} radius={ona ? 14 : 4} />
-        {/if}
+        <!-- Estètica Ona: cada cançó nova arriba de lluny (petita i transparent → al seu lloc amb molla). -->
+        {#key t.id}<span class="mini" class:arrive={ona && !settings.light}>
+          {#if ona && settings.disc}
+            <Disc src={t.album.thumb} playing={player.playing} size="56px" hole={false} />
+          {:else}
+            <Cover src={t.album.thumb} size={56} radius={ona ? 14 : 4} />
+          {/if}
+        </span>{/key}
       </button>
       <div class="txt" class:still={settings.light}>
         <!-- En canviar de cançó, el títol i els artistes nous pugen amb molla. -->
@@ -115,7 +118,10 @@
       <button class="ic wide" class:on={player.shuffle} aria-pressed={player.shuffle} onclick={() => player.toggleShuffle()} title="Ordre aleatori (Ctrl Maj S)"><Icon name="shuffle" size={16} /></button>
       <button class="ic" onclick={() => player.prev()} title="Anterior (Ctrl ←)"><Icon name="prev" size={16} /></button>
       <button class="play" class:loading={player.loading} onpointerdown={ping} onclick={() => player.toggle()} title={player.playing ? "Pausa (espai)" : "Reprodueix (espai)"} disabled={!t}>
-        {#if ona}<span class="ring" bind:this={ring} aria-hidden="true"></span>{/if}
+        {#if ona}
+          <span class="halo" class:on={player.playing && !settings.light} aria-hidden="true"></span>
+          <span class="ring" bind:this={ring} aria-hidden="true"></span>
+        {/if}
         <Icon name={player.playing ? "pause" : "play"} size={ona ? 18 : 16} />
       </button>
       <button class="ic" onclick={() => player.next()} title="Següent (Ctrl →)"><Icon name="next" size={16} /></button>
@@ -297,6 +303,54 @@
       transform var(--t-spring) var(--spring),
       scale var(--t-spring) var(--spring),
       background 0.6s;
+  }
+  .mini {
+    display: block;
+  }
+  .arrive {
+    animation: arrive var(--t-spring) var(--spring) both;
+  }
+  @keyframes arrive {
+    from {
+      opacity: 0;
+      scale: 0.3;
+      translate: 0 -12px;
+    }
+  }
+  /* Halo que respira mentre sona: un anell de llum fora del botó (centre transparent). Una sola animació. */
+  .halo {
+    position: absolute;
+    inset: -12px;
+    border-radius: 50%;
+    background: radial-gradient(circle, transparent 60%, color-mix(in oklab, var(--pb, var(--accent)) 65%, transparent) 68%, transparent 100%);
+    opacity: 0;
+    scale: 0.85;
+    pointer-events: none;
+    transition:
+      opacity var(--t-quick) ease-out,
+      scale var(--t-quick) ease-out;
+  }
+  .halo.on {
+    opacity: 0.7;
+    scale: 1;
+    animation: breathe 3.6s ease-in-out infinite;
+    transition:
+      opacity var(--t-spring) ease-out,
+      scale var(--t-spring) var(--spring);
+  }
+  @keyframes breathe {
+    50% {
+      opacity: 0.3;
+      scale: 1.18;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .halo.on {
+      animation: none;
+    }
+    .arrive {
+      animation: none;
+    }
   }
   .ring {
     position: absolute;
