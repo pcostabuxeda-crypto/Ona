@@ -10,6 +10,9 @@
   import Disc from "./Disc.svelte";
 
   const ona = $derived(settings.look === "ona");
+  /** ≤480 px: portada petita i el «M'agrada» passa al menú ⋯ perquè el títol es llegeixi. */
+  let width = $state(1200);
+  const small = $derived(width <= 480);
 
   /** Estètica Ona: cada clic al play fa sortir una ona (només transform/opacity). */
   let ring = $state<HTMLSpanElement>();
@@ -59,6 +62,9 @@
   /** Pantalla estreta: les accions secundàries van al menú ⋯. */
   function more(e: MouseEvent) {
     ui.openMenu(e, [
+      ...(small && t && !t.src
+        ? [{ label: liked ? "Treu de Cançons que m'agraden" : "Desa a Cançons que m'agraden", icon: liked ? "check" : "addCircle", run: toggleLike }]
+        : []),
       { label: player.shuffle ? "Desactiva l'ordre aleatori" : "Ordre aleatori", icon: "shuffle", run: () => player.toggleShuffle() },
       { label: repeatLabel, icon: "repeat", run: () => player.cycleRepeat() },
       ...(t ? [{ label: "Lletra", icon: "lyrics", run: () => ui.toggleLyrics() }] : []),
@@ -70,6 +76,8 @@
   }
 </script>
 
+<svelte:window bind:innerWidth={width} />
+
 <footer class="bar">
   <div class="now">
     {#if t}
@@ -77,9 +85,9 @@
         <!-- Estètica Ona: cada cançó nova arriba de lluny (petita i transparent → al seu lloc amb molla). -->
         {#key t.id}<span class="mini" class:arrive={ona && !settings.light}>
           {#if ona && settings.disc}
-            <Disc src={t.album.thumb} playing={player.playing} size="56px" hole={false} />
+            <Disc src={t.album.thumb} playing={player.playing} size={small ? "44px" : "56px"} hole={false} />
           {:else}
-            <Cover src={t.album.thumb} size={56} radius={ona ? 14 : 4} />
+            <Cover src={t.album.thumb} size={small ? 44 : 56} radius={ona ? 12 : 4} />
           {/if}
         </span>{/key}
       </button>
@@ -320,7 +328,7 @@
   /* Halo que respira mentre sona: un anell de llum fora del botó (centre transparent). Una sola animació. */
   .halo {
     position: absolute;
-    inset: -12px;
+    inset: -4px;
     border-radius: 50%;
     background: radial-gradient(circle, transparent 60%, color-mix(in oklab, var(--pb, var(--accent)) 65%, transparent) 68%, transparent 100%);
     opacity: 0;
@@ -338,11 +346,16 @@
       opacity var(--t-spring) ease-out,
       scale var(--t-spring) var(--spring);
   }
+  /* Només opacitat: amb escala sortiria de la barra. */
   @keyframes breathe {
     50% {
-      opacity: 0.3;
-      scale: 1.18;
+      opacity: 0.25;
     }
+  }
+  /* 4 px d'aire a dalt perquè l'halo no surti de la barra (mateixa alçada total: 4 + 42 + 4 + 22). */
+  :global(.ona) .mid {
+    padding-top: 4px;
+    gap: 4px;
   }
   @media (prefers-reduced-motion: reduce) {
     .halo.on {
@@ -479,6 +492,33 @@
     }
     .play {
       margin: 0 4px;
+    }
+    /* La fila de dalt només té 6 px de marge: l'halo no ha de sortir de la barra. */
+    .halo {
+      inset: -5px;
+    }
+  }
+  /* ≤480 px: més espai per al títol (uns 20 caràcters a 380 px). */
+  @media (max-width: 480px) {
+    .bar {
+      padding: 6px 10px 8px;
+      column-gap: 6px;
+    }
+    .now {
+      gap: 8px;
+    }
+    .like {
+      display: none;
+    }
+    .controls {
+      gap: 2px;
+    }
+    .ic {
+      width: 28px;
+      height: 28px;
+    }
+    .play {
+      margin: 0 2px;
     }
   }
   .vol {

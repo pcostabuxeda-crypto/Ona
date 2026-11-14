@@ -230,9 +230,9 @@
     position: absolute;
     left: 50%;
     top: 50%;
-    width: 30px;
-    height: 30px;
-    margin: -15px 0 0 -15px;
+    width: 22px;
+    height: 22px;
+    margin: -11px 0 0 -11px;
     border-radius: 50%;
     background: radial-gradient(circle, color-mix(in oklab, var(--comet) 70%, transparent), transparent 65%);
     opacity: 0.45;
@@ -246,7 +246,7 @@
   }
   .wavy:hover .knob::before,
   .wavy.dragging .knob::before {
-    scale: 1.3;
+    opacity: 1;
   }
   .wavy:hover .knob,
   .wavy.dragging .knob {
