@@ -34,7 +34,7 @@
     <div class="viz"><Visualizer style="line" shape="wave" colorA={player.palette.a} colorB={player.palette.b} /></div>
   {/if}
   <main class="scroll">
-    <Lyrics inset={stacked ? "32px" : "52%"} dark space={cosmos} />
+    <Lyrics inset={stacked ? "32px" : "52%"} dark space={cosmos} aura={ona && !settings.light} />
   </main>
 
   <header data-tauri-drag-region>

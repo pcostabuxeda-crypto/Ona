@@ -11,7 +11,12 @@
   import { settings } from "$lib/settings.svelte";
 
   /** `space`: mode espai — sense fons propi (es veu el Cosmos) i les línies arriben des del fons. */
-  let { inset = "40px", dark = false, space = false }: { inset?: string; dark?: boolean; space?: boolean } = $props();
+  let {
+    inset = "40px",
+    dark = false,
+    space = false,
+    aura = false,
+  }: { inset?: string; dark?: boolean; space?: boolean; aura?: boolean } = $props();
 
   const LEAD_MS = 250;
   const memo = new Map<string, Lyrics>();
@@ -70,7 +75,7 @@
 
 {#if rich && lyrics}
   {#key player.current?.id}
-    <RichLyrics {lyrics} {inset} {dark} {space} />
+    <RichLyrics {lyrics} {inset} {dark} {space} {aura} />
   {/key}
 {:else}
   <section class="lyrics" class:dark class:space style:--bg={player.palette.a} style:--inset={inset} bind:this={box}>
