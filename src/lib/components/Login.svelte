@@ -4,9 +4,9 @@
   let { onlogin, onfree, busy, error }: { onlogin: () => void; onfree: () => void; busy: boolean; error: string } = $props();
 </script>
 
-<section class="login" data-tauri-drag-region>
+<section class="login" class:space={settings.look === "ona" && !settings.light} data-tauri-drag-region>
   <div class="box" class:still={settings.light}>
-    <svg width="48" height="48" viewBox="0 0 24 24" aria-hidden="true">
+    <svg class="logo" width="48" height="48" viewBox="0 0 24 24" aria-hidden="true">
       <path fill="#fff" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20m4.6 14.4a.6.6 0 0 1-.9.2c-2.4-1.4-5.3-1.8-8.8-1a.6.6 0 1 1-.3-1.2c3.8-.9 7-.5 9.7 1.1.3.2.4.6.3.9m1.2-2.7a.8.8 0 0 1-1 .3c-2.7-1.7-6.9-2.2-10.2-1.2a.8.8 0 0 1-.4-1.5c3.7-1.1 8.3-.6 11.4 1.4.3.2.4.7.2 1m.1-2.8C14.7 9 9.4 8.8 6.3 9.7a.9.9 0 1 1-.5-1.8C9.3 6.9 15.2 7.1 18.9 9.3a.9.9 0 0 1-1 1.6" />
     </svg>
     <h1>Milions de cançons.<br />Sense pagar en RAM.</h1>
@@ -110,5 +110,47 @@
   }
   .err {
     color: #f3727f;
+  }
+
+  /* ---------- Estètica Ona: la caixa sura a l'espai (el fons de tema ja és darrere) ---------- */
+  :global(.ona) .login {
+    background: none;
+  }
+  :global(.ona) .box {
+    border-radius: 28px;
+    background: rgb(255 255 255 / 0.04);
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.1),
+      inset 0 1px 0 rgb(255 255 255 / 0.14),
+      0 30px 80px -20px rgb(0 0 0 / 0.6);
+  }
+  /* Arriba des del fons: petita i transparent → al seu lloc amb una molla suau. */
+  .space .box {
+    animation: from-depth 900ms var(--spring-soft) both;
+  }
+  @keyframes from-depth {
+    from {
+      opacity: 0;
+      scale: 0.7;
+      translate: 0 30px;
+    }
+  }
+  /* El logo sura (una sola animació) sobre una llum quieta. */
+  .space .logo {
+    animation:
+      rise var(--t-spring) var(--spring) both,
+      float 6s ease-in-out 1s infinite;
+    filter: drop-shadow(0 0 18px color-mix(in oklab, var(--pb, var(--accent)) 80%, transparent));
+  }
+  @keyframes float {
+    50% {
+      translate: 0 -8px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .space .box,
+    .space .logo {
+      animation: none;
+    }
   }
 </style>
