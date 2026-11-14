@@ -37,9 +37,10 @@
     display: block;
     opacity: 0;
     transform: scale(1.04);
+    /* Tokens de moviment: amb moviment reduït, apareix sense transició. */
     transition:
-      opacity 0.4s ease,
-      transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+      opacity var(--t-spring) ease-out,
+      transform var(--t-spring) var(--spring-soft);
   }
   img.loaded {
     opacity: 1;

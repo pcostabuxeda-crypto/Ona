@@ -80,8 +80,9 @@
           <Cover src={t.album.thumb} size={56} radius={ona ? 14 : 4} />
         {/if}
       </button>
-      <div class="txt">
-        <a class="name" href="#album" onclick={(e) => (e.preventDefault(), t.album.id && ui.go({ name: "collection", kind: "album", id: t.album.id }))}>{t.name}</a>
+      <div class="txt" class:still={settings.light}>
+        <!-- En canviar de cançó, el títol i els artistes nous pugen amb molla. -->
+        {#key t.id}<a class="name in" href="#album" onclick={(e) => (e.preventDefault(), t.album.id && ui.go({ name: "collection", kind: "album", id: t.album.id }))}>{t.name}</a>{/key}
         <!-- Regió viva permanent: l'error de reproducció s'anuncia aquí mateix. -->
         <span class="artists" aria-live="polite">
           {#if player.error}
@@ -89,9 +90,11 @@
             <button class="link" onclick={() => player.retry()}>Torna-ho a provar</button>
             <button class="link" onclick={() => player.next()}>Salta</button>
           {:else}
-            {#each t.artists as a, j (a.id + j)}
-              {#if j > 0},&nbsp;{/if}<a href="#artist" onclick={(e) => (e.preventDefault(), a.id && ui.go({ name: "collection", kind: "artist", id: a.id }))}>{a.name}</a>
-            {/each}
+            {#key t.id}<span class="in who">
+              {#each t.artists as a, j (a.id + j)}
+                {#if j > 0},&nbsp;{/if}<a href="#artist" onclick={(e) => (e.preventDefault(), a.id && ui.go({ name: "collection", kind: "artist", id: a.id }))}>{a.name}</a>
+              {/each}
+            </span>{/key}
           {/if}
         </span>
       </div>
@@ -190,6 +193,26 @@
   a:hover {
     text-decoration: underline;
     color: var(--text);
+  }
+  .who {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .in {
+    animation: song-in var(--t-spring) var(--spring) both;
+  }
+  .who.in {
+    animation-delay: 40ms;
+  }
+  .still .in {
+    animation: none;
+  }
+  @keyframes song-in {
+    from {
+      opacity: 0;
+      translate: 0 8px;
+    }
   }
   .ic {
     position: relative;

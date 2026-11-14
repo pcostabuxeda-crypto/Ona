@@ -30,11 +30,11 @@
 <header class="bar" data-tauri-drag-region>
   {#if loggedIn}
     <div class="nav" data-tauri-drag-region>
-      <button class="arrow" disabled={ui.stack.length < 2} onclick={() => ui.back()} title="Enrere"><Icon name="back" size={16} /></button>
-      <button class="arrow" disabled={!ui.forward.length} onclick={() => ui.fwd()} title="Endavant"><Icon name="forward" size={16} /></button>
+      <button class="arrow" disabled={ui.stack.length < 2} onclick={() => ui.back()} title="Enrere (Alt ←)" aria-label="Enrere"><Icon name="back" size={16} /></button>
+      <button class="arrow" disabled={!ui.forward.length} onclick={() => ui.fwd()} title="Endavant (Alt →)" aria-label="Endavant"><Icon name="forward" size={16} /></button>
     </div>
     <div class="center" data-tauri-drag-region>
-      <button class="home" class:on={ui.view.name === "home"} onclick={() => ui.go({ name: "home" })} title="Inici">
+      <button class="home" class:on={ui.view.name === "home"} onclick={() => ui.go({ name: "home" })} title="Inici" aria-label="Inici">
         <Icon name={ui.view.name === "home" ? "homeFilled" : "home"} size={24} />
       </button>
       <label class="search">
@@ -43,6 +43,7 @@
           id="search"
           type="search"
           placeholder="Què vols escoltar?"
+          aria-label="Cerca (Ctrl K)"
           bind:value={ui.query}
           oninput={onSearchInput}
           onfocus={onSearchInput}
@@ -51,14 +52,14 @@
         />
       </label>
     </div>
-    <button class="avatar" onclick={profileMenu} oncontextmenu={profileMenu} title={ui.user?.name ?? ""}>
+    <button class="avatar" onclick={profileMenu} oncontextmenu={profileMenu} title={ui.user?.name ?? ""} aria-label="Perfil i opcions" aria-haspopup="menu">
       {#if ui.user?.image}<img src={ui.user.image} alt="" />{:else}{(ui.user?.name ?? "?").slice(0, 1).toUpperCase()}{/if}
     </button>
   {/if}
   <div class="win">
-    <button onclick={() => win.minimize()} title="Minimitza"><Icon name="min" size={16} /></button>
-    <button onclick={() => win.toggleMaximize()} title="Maximitza"><Icon name="max" size={14} /></button>
-    <button class="close" onclick={() => win.close()} title="Tanca"><Icon name="close" size={16} /></button>
+    <button onclick={() => win.minimize()} title="Minimitza" aria-label="Minimitza"><Icon name="min" size={16} /></button>
+    <button onclick={() => win.toggleMaximize()} title="Maximitza" aria-label="Maximitza"><Icon name="max" size={14} /></button>
+    <button class="close" onclick={() => win.close()} title="Tanca" aria-label="Tanca"><Icon name="close" size={16} /></button>
   </div>
 </header>
 

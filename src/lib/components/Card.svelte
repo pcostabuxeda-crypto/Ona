@@ -6,10 +6,12 @@
   import { TILES } from "$lib/tiles";
   import { player } from "$lib/player.svelte";
   import { ui } from "$lib/ui.svelte";
+  import { settings } from "$lib/settings.svelte";
   import Cover from "./Cover.svelte";
   import Icon from "./Icon.svelte";
 
-  let { item }: { item: Collection } = $props();
+  /** `index`: posició al prestatge, per a l'entrada esglaonada. */
+  let { item, index = 0 }: { item: Collection; index?: number } = $props();
 
   const open = () => ui.go({ name: "collection", kind: item.kind, id: item.id });
 
@@ -24,14 +26,15 @@
   }
 </script>
 
-<div class="card" role="button" tabindex="0" onclick={open} onkeydown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open())}>
+<div class="card" class:still={settings.light} style:--i={index} role="button" tabindex="0" onclick={open} onkeydown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open())}>
   <div class="art">
     {#if TILES[item.kind]}
       <div class="liked" style:background={TILES[item.kind]?.bg}><Icon name={TILES[item.kind]?.icon ?? ""} size={48} /></div>
     {:else}
       <Cover src={item.image ?? covers[item.id]} size="100%" radius={6} round={item.kind === "artist"} />
     {/if}
-    <button class="play-fab" onclick={play} title="Reprodueix"><Icon name="play" size={24} /></button>
+    <!-- L'embolcall fa l'aparició; el botó conserva el seu hover i el «clic que s'enfonsa». -->
+    <span class="fab"><button class="play-fab" onclick={play} title="Reprodueix" aria-label="Reprodueix {item.name}"><Icon name="play" size={24} /></button></span>
   </div>
   <span class="name">{item.name}</span>
   <span class="sub">{item.subtitle}</span>
@@ -47,14 +50,27 @@
     gap: 4px;
     cursor: pointer;
     transition: background 0.2s;
+    /* Entrada esglaonada: cada targeta arriba una mica després de l'anterior (màx. 12). */
+    animation: rise var(--t-spring) var(--spring) both;
+    animation-delay: calc(min(var(--i), 12) * 35ms);
   }
-  .card:hover {
+  .card.still {
+    animation: none;
+  }
+  .card:hover,
+  .card:focus-visible {
     background: var(--highlight);
   }
   .art {
     position: relative;
     aspect-ratio: 1;
     margin-bottom: 4px;
+    transition: translate var(--t-spring) var(--spring);
+  }
+  /* La portada s'aixeca amb molla en passar-hi per sobre o amb el focus del teclat. */
+  .card:hover .art,
+  .card:focus-visible .art {
+    translate: 0 -4px;
   }
   .art :global(.cover) {
     aspect-ratio: 1;
@@ -67,18 +83,36 @@
     display: grid;
     place-items: center;
   }
-  .play-fab {
+  .fab {
     position: absolute;
     right: 8px;
     bottom: 8px;
     opacity: 0;
-    transform: translateY(8px);
-    transition: opacity 0.3s, transform 0.3s;
+    translate: 0 10px;
+    scale: 0.85;
+    /* Sortir de pressa; entrar amb molla (regla de sota). */
+    transition:
+      opacity var(--t-quick) ease-out,
+      translate var(--t-quick) ease-out,
+      scale var(--t-quick) ease-out;
   }
-  .card:hover .play-fab,
-  .play-fab:focus-visible {
+  .card:hover .fab,
+  .card:focus-visible .fab,
+  .fab:focus-within {
     opacity: 1;
-    transform: none;
+    translate: none;
+    scale: 1;
+    transition:
+      opacity var(--t-quick) ease-out,
+      translate var(--t-spring) var(--spring),
+      scale var(--t-spring) var(--spring);
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      translate: 0 16px;
+      scale: 0.96;
+    }
   }
   .name,
   .sub {

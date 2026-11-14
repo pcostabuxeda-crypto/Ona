@@ -6,6 +6,7 @@
   import * as A from "$lib/api";
   import type { Lyrics } from "$lib/api";
   import RichLyrics from "$lib/components/RichLyrics.svelte";
+  import Skeleton from "$lib/components/Skeleton.svelte";
   import { player } from "$lib/player.svelte";
   import { settings } from "$lib/settings.svelte";
 
@@ -75,7 +76,9 @@
     {#if !player.current}
       <p class="msg">Posa alguna cançó.</p>
     {:else if lyrics === undefined}
-      <p class="msg">Carregant la lletra…</p>
+      <div class="sk" role="status" aria-busy="true" aria-label="Carregant la lletra">
+        {#each ["70%", "55%", "80%", "40%", "65%"] as w, i (i)}<Skeleton {w} h="28px" />{/each}
+      </div>
     {:else if lyrics === null || !lyrics.lines.length}
       <p class="msg">Encara no tenim la lletra d'aquesta cançó.</p>
     {:else}
@@ -138,6 +141,12 @@
   .msg {
     font-size: 24px;
     font-weight: 700;
+  }
+  .sk {
+    width: min(100%, 560px);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
   }
   .src {
     margin-top: 32px;
