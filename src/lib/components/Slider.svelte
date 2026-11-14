@@ -79,6 +79,8 @@
 >
   {#if wavy}
     <div class="done" style:width="max(0px, calc({shown * 100}% - 5px))">
+      <!-- Estela del cometa: s'esvaeix cap enrere des del cap (la barreta), sempre enganxada a la dreta. -->
+      <div class="trail"></div>
       <svg class="wave" height="12" width="2400" aria-hidden="true">
         <path d={WAVE_D} fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
       </svg>
@@ -181,6 +183,25 @@
       transform: translateX(26px);
     }
   }
+  /* Cometa: color de la portada aclarit. L'estela i l'halo són degradats quiets; només canvia l'opacitat. */
+  .wavy {
+    --comet: color-mix(in oklab, var(--pb, var(--accent)) 55%, white);
+  }
+  .trail {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    width: min(140px, 100%);
+    height: 12px;
+    margin-top: -6px;
+    border-radius: 99px;
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--comet) 45%, transparent));
+    opacity: 0.5;
+    transition: opacity var(--t-spring) ease-out;
+  }
+  .waving .trail {
+    opacity: 1;
+  }
   .rest {
     position: absolute;
     right: 0;
@@ -196,12 +217,36 @@
     height: 16px;
     margin-left: -2.5px;
     border-radius: 99px;
-    background: var(--accent);
+    background: var(--comet);
     box-shadow: none;
     transition:
       height 0.3s var(--spring),
       width 0.3s var(--spring),
       margin 0.3s var(--spring);
+  }
+  /* Cap del cometa: halo de llum al voltant de la barreta, més viu mentre sona. */
+  .wavy .knob::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 30px;
+    height: 30px;
+    margin: -15px 0 0 -15px;
+    border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in oklab, var(--comet) 70%, transparent), transparent 65%);
+    opacity: 0.45;
+    pointer-events: none;
+    transition:
+      opacity var(--t-spring) ease-out,
+      scale var(--t-spring) var(--spring);
+  }
+  .waving .knob::before {
+    opacity: 1;
+  }
+  .wavy:hover .knob::before,
+  .wavy.dragging .knob::before {
+    scale: 1.3;
   }
   .wavy:hover .knob,
   .wavy.dragging .knob {
