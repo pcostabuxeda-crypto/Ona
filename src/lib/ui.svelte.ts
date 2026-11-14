@@ -15,6 +15,8 @@ class Ui {
   stack = $state<View[]>([{ name: "home" }]);
   forward = $state<View[]>([]);
   view = $derived(this.stack[this.stack.length - 1]);
+  /** Sentit de l'últim salt: 1 = endavant (cap a l'espai), -1 = enrere (la vista surt de darrere nostre). */
+  dir = $state<1 | -1>(1);
   panel = $state<Panel>("npv");
   /** Text del cercador de la barra de dalt. */
   query = $state("");
@@ -31,12 +33,14 @@ class Ui {
 
   go(v: View) {
     if (JSON.stringify(this.view) === JSON.stringify(v)) return;
+    this.dir = 1;
     this.stack = [...this.stack, v].slice(-50);
     this.forward = [];
   }
 
   back() {
     if (this.stack.length < 2) return;
+    this.dir = -1;
     this.forward = [this.view, ...this.forward];
     this.stack = this.stack.slice(0, -1);
   }
@@ -44,6 +48,7 @@ class Ui {
   fwd() {
     const [next, ...rest] = this.forward;
     if (!next) return;
+    this.dir = 1;
     this.stack = [...this.stack, next];
     this.forward = rest;
   }

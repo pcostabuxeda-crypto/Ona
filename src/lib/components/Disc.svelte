@@ -5,7 +5,14 @@
    */
   import Cover from "./Cover.svelte";
 
-  let { src, playing, size = "min(40vh, 30vw)", hole = true }: { src?: string; playing: boolean; size?: string; hole?: boolean } = $props();
+  /** `planet`: mode espai — halo del color de la portada, anell inclinat i una lluna que hi orbita. */
+  let {
+    src,
+    playing,
+    size = "min(40vh, 30vw)",
+    hole = true,
+    planet = false,
+  }: { src?: string; playing: boolean; size?: string; hole?: boolean; planet?: boolean } = $props();
 
   let spinner: HTMLDivElement;
   let anim: Animation | undefined;
@@ -40,7 +47,15 @@
   });
 </script>
 
-<div class="disc" style:--s={size} class:playing>
+<div class="disc" style:--s={size} class:playing class:planet>
+  {#if planet}
+    <div class="glow"></div>
+    <!-- L'anell i el disc comparteixen l'espai 3D: la meitat de l'anell passa per darrere. -->
+    <div class="orbit">
+      <div class="ring"></div>
+      <div class="moonpath"><span class="moon"></span></div>
+    </div>
+  {/if}
   <div class="spin" bind:this={spinner}>
     <Cover {src} size="100%" round />
     <div class="grooves"></div>
@@ -100,6 +115,75 @@
   @media (prefers-reduced-motion: reduce) {
     .disc {
       transition: none;
+    }
+    .moonpath,
+    .moon {
+      animation: none;
+    }
+  }
+  /* ---------- Planeta (mode espai) ---------- */
+  .planet {
+    transform-style: preserve-3d;
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.08),
+      0 0 60px -10px color-mix(in oklab, var(--pb, #8b7bff) 70%, transparent);
+  }
+  /* Atmosfera: llum del color de la portada per darrere (es pinta un cop). */
+  .glow {
+    position: absolute;
+    inset: -35%;
+    border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in oklab, var(--pb, #8b7bff) 45%, transparent) 28%, transparent 62%);
+    transform: translateZ(-1px);
+    pointer-events: none;
+  }
+  .orbit {
+    position: absolute;
+    inset: -24%;
+    transform-style: preserve-3d;
+    transform: rotateZ(-16deg) rotateX(74deg);
+    pointer-events: none;
+  }
+  .ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid rgb(255 255 255 / 0.28);
+    box-shadow:
+      0 0 0 6px rgb(255 255 255 / 0.05),
+      0 0 24px color-mix(in oklab, var(--pb, #8b7bff) 60%, transparent);
+  }
+  .moonpath {
+    position: absolute;
+    inset: 0;
+    transform-style: preserve-3d;
+    animation: orbit 14s linear infinite;
+  }
+  .moon {
+    position: absolute;
+    left: 50%;
+    top: -5px;
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #fff, color-mix(in oklab, var(--pb, #8b7bff) 60%, #fff) 60%);
+    box-shadow: 0 0 12px rgb(255 255 255 / 0.7);
+    /* Desfà el gir i la inclinació de l'òrbita perquè la lluna sempre es vegi rodona. */
+    transform: rotateX(-74deg);
+    animation: face 14s linear infinite;
+  }
+  @keyframes orbit {
+    to {
+      rotate: z 1turn;
+    }
+  }
+  @keyframes face {
+    from {
+      transform: rotateZ(0deg) rotateX(-74deg);
+    }
+    to {
+      transform: rotateZ(-360deg) rotateX(-74deg);
     }
   }
   .hole {

@@ -10,6 +10,9 @@
   import Disc from "./Disc.svelte";
 
   const ona = $derived(settings.look === "ona");
+  /** ≤480 px: portada petita i el «M'agrada» passa al menú ⋯ perquè el títol es llegeixi. */
+  let width = $state(1200);
+  const small = $derived(width <= 480);
 
   /** Estètica Ona: cada clic al play fa sortir una ona (només transform/opacity). */
   let ring = $state<HTMLSpanElement>();
@@ -59,6 +62,9 @@
   /** Pantalla estreta: les accions secundàries van al menú ⋯. */
   function more(e: MouseEvent) {
     ui.openMenu(e, [
+      ...(small && t && !t.src
+        ? [{ label: liked ? "Treu de Cançons que m'agraden" : "Desa a Cançons que m'agraden", icon: liked ? "check" : "addCircle", run: toggleLike }]
+        : []),
       { label: player.shuffle ? "Desactiva l'ordre aleatori" : "Ordre aleatori", icon: "shuffle", run: () => player.toggleShuffle() },
       { label: repeatLabel, icon: "repeat", run: () => player.cycleRepeat() },
       ...(t ? [{ label: "Lletra", icon: "lyrics", run: () => ui.toggleLyrics() }] : []),
@@ -70,18 +76,24 @@
   }
 </script>
 
+<svelte:window bind:innerWidth={width} />
+
 <footer class="bar">
   <div class="now">
     {#if t}
       <button class="cover" onclick={() => ui.togglePanel("npv")} title="Ara sona" aria-label="Ara sona: {t.name}" class:dim={!!player.error}>
-        {#if ona && settings.disc}
-          <Disc src={t.album.thumb} playing={player.playing} size="56px" hole={false} />
-        {:else}
-          <Cover src={t.album.thumb} size={56} radius={ona ? 14 : 4} />
-        {/if}
+        <!-- Estètica Ona: cada cançó nova arriba de lluny (petita i transparent → al seu lloc amb molla). -->
+        {#key t.id}<span class="mini" class:arrive={ona && !settings.light}>
+          {#if ona && settings.disc}
+            <Disc src={t.album.thumb} playing={player.playing} size={small ? "44px" : "56px"} hole={false} />
+          {:else}
+            <Cover src={t.album.thumb} size={small ? 44 : 56} radius={ona ? 12 : 4} />
+          {/if}
+        </span>{/key}
       </button>
-      <div class="txt">
-        <a class="name" href="#album" onclick={(e) => (e.preventDefault(), t.album.id && ui.go({ name: "collection", kind: "album", id: t.album.id }))}>{t.name}</a>
+      <div class="txt" class:still={settings.light}>
+        <!-- En canviar de cançó, el títol i els artistes nous pugen amb molla. -->
+        {#key t.id}<a class="name in" href="#album" onclick={(e) => (e.preventDefault(), t.album.id && ui.go({ name: "collection", kind: "album", id: t.album.id }))}>{t.name}</a>{/key}
         <!-- Regió viva permanent: l'error de reproducció s'anuncia aquí mateix. -->
         <span class="artists" aria-live="polite">
           {#if player.error}
@@ -89,9 +101,11 @@
             <button class="link" onclick={() => player.retry()}>Torna-ho a provar</button>
             <button class="link" onclick={() => player.next()}>Salta</button>
           {:else}
-            {#each t.artists as a, j (a.id + j)}
-              {#if j > 0},&nbsp;{/if}<a href="#artist" onclick={(e) => (e.preventDefault(), a.id && ui.go({ name: "collection", kind: "artist", id: a.id }))}>{a.name}</a>
-            {/each}
+            {#key t.id}<span class="in who">
+              {#each t.artists as a, j (a.id + j)}
+                {#if j > 0},&nbsp;{/if}<a href="#artist" onclick={(e) => (e.preventDefault(), a.id && ui.go({ name: "collection", kind: "artist", id: a.id }))}>{a.name}</a>
+              {/each}
+            </span>{/key}
           {/if}
         </span>
       </div>
@@ -112,7 +126,10 @@
       <button class="ic wide" class:on={player.shuffle} aria-pressed={player.shuffle} onclick={() => player.toggleShuffle()} title="Ordre aleatori (Ctrl Maj S)"><Icon name="shuffle" size={16} /></button>
       <button class="ic" onclick={() => player.prev()} title="Anterior (Ctrl ←)"><Icon name="prev" size={16} /></button>
       <button class="play" class:loading={player.loading} onpointerdown={ping} onclick={() => player.toggle()} title={player.playing ? "Pausa (espai)" : "Reprodueix (espai)"} disabled={!t}>
-        {#if ona}<span class="ring" bind:this={ring} aria-hidden="true"></span>{/if}
+        {#if ona}
+          <span class="halo" class:on={player.playing && !settings.light} aria-hidden="true"></span>
+          <span class="ring" bind:this={ring} aria-hidden="true"></span>
+        {/if}
         <Icon name={player.playing ? "pause" : "play"} size={ona ? 18 : 16} />
       </button>
       <button class="ic" onclick={() => player.next()} title="Següent (Ctrl →)"><Icon name="next" size={16} /></button>
@@ -190,6 +207,26 @@
   a:hover {
     text-decoration: underline;
     color: var(--text);
+  }
+  .who {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .in {
+    animation: song-in var(--t-spring) var(--spring) both;
+  }
+  .who.in {
+    animation-delay: 40ms;
+  }
+  .still .in {
+    animation: none;
+  }
+  @keyframes song-in {
+    from {
+      opacity: 0;
+      translate: 0 8px;
+    }
   }
   .ic {
     position: relative;
@@ -274,6 +311,59 @@
       transform var(--t-spring) var(--spring),
       scale var(--t-spring) var(--spring),
       background 0.6s;
+  }
+  .mini {
+    display: block;
+  }
+  .arrive {
+    animation: arrive var(--t-spring) var(--spring) both;
+  }
+  @keyframes arrive {
+    from {
+      opacity: 0;
+      scale: 0.3;
+      translate: 0 -12px;
+    }
+  }
+  /* Halo que respira mentre sona: un anell de llum fora del botó (centre transparent). Una sola animació. */
+  .halo {
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    background: radial-gradient(circle, transparent 60%, color-mix(in oklab, var(--pb, var(--accent)) 65%, transparent) 68%, transparent 100%);
+    opacity: 0;
+    scale: 0.85;
+    pointer-events: none;
+    transition:
+      opacity var(--t-quick) ease-out,
+      scale var(--t-quick) ease-out;
+  }
+  .halo.on {
+    opacity: 0.7;
+    scale: 1;
+    animation: breathe 3.6s ease-in-out infinite;
+    transition:
+      opacity var(--t-spring) ease-out,
+      scale var(--t-spring) var(--spring);
+  }
+  /* Només opacitat: amb escala sortiria de la barra. */
+  @keyframes breathe {
+    50% {
+      opacity: 0.25;
+    }
+  }
+  /* 4 px d'aire a dalt perquè l'halo no surti de la barra (mateixa alçada total: 4 + 42 + 4 + 22). */
+  :global(.ona) .mid {
+    padding-top: 4px;
+    gap: 4px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .halo.on {
+      animation: none;
+    }
+    .arrive {
+      animation: none;
+    }
   }
   .ring {
     position: absolute;
@@ -402,6 +492,33 @@
     }
     .play {
       margin: 0 4px;
+    }
+    /* La fila de dalt només té 6 px de marge: l'halo no ha de sortir de la barra. */
+    .halo {
+      inset: -5px;
+    }
+  }
+  /* ≤480 px: més espai per al títol (uns 20 caràcters a 380 px). */
+  @media (max-width: 480px) {
+    .bar {
+      padding: 6px 10px 8px;
+      column-gap: 6px;
+    }
+    .now {
+      gap: 8px;
+    }
+    .like {
+      display: none;
+    }
+    .controls {
+      gap: 2px;
+    }
+    .ic {
+      width: 28px;
+      height: 28px;
+    }
+    .play {
+      margin: 0 2px;
     }
   }
   .vol {

@@ -8,7 +8,9 @@
   import { ui } from "$lib/ui.svelte";
   import Cover from "./Cover.svelte";
   import Icon from "./Icon.svelte";
-  import { tick } from "svelte";
+  import Skeleton from "./Skeleton.svelte";
+  import { settings } from "$lib/settings.svelte";
+  import { onMount, tick } from "svelte";
   import { matches } from "$lib/fuzzy";
 
   let { collapsed = false }: { collapsed?: boolean } = $props();
@@ -22,15 +24,25 @@
   let wide = $state(false);
   let query = $state("");
   let search = $state<HTMLInputElement>();
+  /** Esperant les playlists (només amb compte de Spotify). */
+  let loading = $state(false);
+  /** Primera càrrega: les files entren esglaonades una sola vegada. */
+  let fresh = $state(true);
+  onMount(() => {
+    const t = setTimeout(() => (fresh = false), 2500);
+    return () => clearTimeout(t);
+  });
 
   $effect(() => {
     if (ui.free) return;
+    loading = true;
     A.myPlaylists()
       .then((r) => {
         playlists = r;
         A.fillCovers(r);
       })
-      .catch(() => ui.say("No s'han pogut carregar les playlists"));
+      .catch(() => ui.say("No s'han pogut carregar les playlists"))
+      .finally(() => (loading = false));
     A.followedArtists().then((r) => (artists = r)).catch(() => {});
     A.savedAlbums().then((r) => (albums = r)).catch(() => {});
   });
@@ -94,12 +106,14 @@
         onkeydown={(e) => e.key === "Escape" && ((query = ""), search?.blur())}
       />
     </label>
-    {#if query.trim() && !items.length}<p class="none">Cap resultat per «{query.trim()}».</p>{/if}
+    {#if query.trim() && !items.length}<p class="none">Cap resultat per «{query.trim()}». Prova amb menys lletres.</p>
+    {:else if !query.trim() && !items.length && filter === "artist"}<p class="none">Encara no segueixes cap artista.</p>
+    {:else if !query.trim() && !items.length && filter === "album"}<p class="none">Encara no has desat cap àlbum.</p>{/if}
   {/if}
 
-  <ul>
-    {#each items as c (c.kind + c.id)}
-      <li>
+  <ul class:still={settings.light}>
+    {#each items as c, i (c.kind + c.id)}
+      <li class:rise={fresh && i < 20} style:--i={i}>
         <button class="row" class:on={isOpen(c)} onclick={() => open(c)} title={c.name}>
           {#if TILES[c.kind]}
             <span class="liked" style:background={TILES[c.kind]?.bg}><Icon name={TILES[c.kind]?.icon ?? ""} size={small ? 18 : 20} /></span>
@@ -116,6 +130,14 @@
         </button>
       </li>
     {/each}
+    {#if loading && !playlists.length}
+      {#each { length: 6 }, i (i)}
+        <li class="sk-row" aria-hidden="true">
+          <Skeleton w="48px" h="48px" r="4px" />
+          {#if !small}<span><Skeleton w="70%" h="14px" /><Skeleton w="40%" h="12px" /></span>{/if}
+        </li>
+      {/each}
+    {/if}
   </ul>
 </nav>
 
@@ -206,8 +228,37 @@
   .small .row {
     justify-content: center;
   }
-  .row:hover {
+  .row:hover,
+  .row:focus-visible {
     background: var(--highlight);
+  }
+  li.rise {
+    animation: rise var(--t-spring) var(--spring) both;
+    animation-delay: calc(var(--i) * 22ms);
+  }
+  .still li.rise {
+    animation: none;
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      translate: -10px 0;
+    }
+  }
+  .sk-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px;
+  }
+  .small .sk-row {
+    justify-content: center;
+  }
+  .sk-row span {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
   .row.on {
     background: var(--elevated-hi);

@@ -11,6 +11,7 @@
     { id: "liner", name: "Liner", hint: "Fosc i neutre, lletra a pantalla completa", swatch: "linear-gradient(160deg, #fff 0 22%, #0f0f11 22%)" },
   ];
   const EFFECTS: { id: Effect; name: string }[] = [
+    { id: "warp", name: "Viatge" },
     { id: "stars", name: "Estrelles" },
     { id: "bubbles", name: "Bombolles" },
     { id: "none", name: "Cap" },
@@ -50,7 +51,10 @@
         <div class="themes">
           {#each THEMES as t (t.id)}
             <label class="theme" class:on={settings.theme === t.id} title={t.name}>
-              <input type="radio" name="theme" value={t.id} checked={settings.theme === t.id} onchange={() => setSetting("theme", t.id)} />
+              <input type="radio" name="theme" value={t.id} checked={settings.theme === t.id} onchange={() => {
+                  setSetting("theme", t.id);
+                  if (t.id === "cosmos") setSetting("effect", "warp"); // el Cosmos sense viatge perd la gràcia
+                }} />
               <span class="dot" style:background={t.id === "cover" ? "conic-gradient(#f59b73, #5b3cc4, #1d6fa3, #f59b73)" : t.background}></span>
               <span class="tname">{t.name}</span>
             </label>

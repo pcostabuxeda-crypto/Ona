@@ -6,10 +6,17 @@
   import * as A from "$lib/api";
   import type { Lyrics } from "$lib/api";
   import RichLyrics from "$lib/components/RichLyrics.svelte";
+  import Skeleton from "$lib/components/Skeleton.svelte";
   import { player } from "$lib/player.svelte";
   import { settings } from "$lib/settings.svelte";
 
-  let { inset = "40px", dark = false }: { inset?: string; dark?: boolean } = $props();
+  /** `space`: mode espai — sense fons propi (es veu el Cosmos) i les línies arriben des del fons. */
+  let {
+    inset = "40px",
+    dark = false,
+    space = false,
+    aura = false,
+  }: { inset?: string; dark?: boolean; space?: boolean; aura?: boolean } = $props();
 
   const LEAD_MS = 250;
   const memo = new Map<string, Lyrics>();
@@ -68,14 +75,16 @@
 
 {#if rich && lyrics}
   {#key player.current?.id}
-    <RichLyrics {lyrics} {inset} {dark} />
+    <RichLyrics {lyrics} {inset} {dark} {space} {aura} />
   {/key}
 {:else}
-  <section class="lyrics" class:dark style:--bg={player.palette.a} style:--inset={inset} bind:this={box}>
+  <section class="lyrics" class:dark class:space style:--bg={player.palette.a} style:--inset={inset} bind:this={box}>
     {#if !player.current}
       <p class="msg">Posa alguna cançó.</p>
     {:else if lyrics === undefined}
-      <p class="msg">Carregant la lletra…</p>
+      <div class="sk" role="status" aria-busy="true" aria-label="Carregant la lletra">
+        {#each ["70%", "55%", "80%", "40%", "65%"] as w, i (i)}<Skeleton {w} h="28px" />{/each}
+      </div>
     {:else if lyrics === null || !lyrics.lines.length}
       <p class="msg">Encara no tenim la lletra d'aquesta cançó.</p>
     {:else}
@@ -111,6 +120,9 @@
   .dark {
     background: radial-gradient(circle at 30% 40%, color-mix(in srgb, var(--bg) 45%, #000), #0a0a0b 75%);
   }
+  .lyrics.space {
+    background: transparent;
+  }
   .dark .line.future {
     color: rgb(255 255 255 / 0.3);
   }
@@ -138,6 +150,12 @@
   .msg {
     font-size: 24px;
     font-weight: 700;
+  }
+  .sk {
+    width: min(100%, 560px);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
   }
   .src {
     margin-top: 32px;

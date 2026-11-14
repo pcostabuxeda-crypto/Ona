@@ -5,6 +5,7 @@
   import { fmtTime } from "$lib/api";
   import { player } from "$lib/player.svelte";
   import { flyToQueue } from "$lib/fly";
+  import { settings } from "$lib/settings.svelte";
   import { ui } from "$lib/ui.svelte";
   import Cover from "./Cover.svelte";
   import Icon from "./Icon.svelte";
@@ -32,6 +33,13 @@
     start = Math.max(0, first - OVERSCAN);
     end = Math.min(tracks.length, first + count + OVERSCAN);
   }
+
+  /** Just després d'obrir la llista: les primeres files entren esglaonades (en fer scroll, ja no). */
+  let fresh = $state(true);
+  onMount(() => {
+    const t = setTimeout(() => (fresh = false), 1200);
+    return () => clearTimeout(t);
+  });
 
   onMount(() => {
     const target = scroller;
@@ -118,7 +126,7 @@
   }
 </script>
 
-<div class="tl">
+<div class="tl" class:still={settings.light}>
 {#if header}
   <div class="row head" class:noalbum={!showAlbum}>
     <span class="idx">#</span>
@@ -136,6 +144,8 @@
       class="row"
       class:active
       class:noalbum={!showAlbum}
+      class:rise={fresh && n < 16}
+      style:--i={n}
       style:transform={scroller ? `translateY(${n * ROW}px)` : null}
       role="button"
       tabindex="0"
@@ -203,6 +213,20 @@
   }
   .row.noalbum {
     grid-template-columns: 16px minmax(0, 1fr) 32px 56px;
+  }
+  /* `translate` (no `transform`): la fila virtual ja es posiciona amb transform. */
+  .row.rise {
+    animation: rise var(--t-spring) var(--spring) both;
+    animation-delay: calc(var(--i) * 25ms);
+  }
+  .still .row.rise {
+    animation: none;
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      translate: 0 10px;
+    }
   }
   .row:not(.head):hover {
     background: rgb(255 255 255 / 0.1);
@@ -291,13 +315,23 @@
   .actions button {
     color: var(--text-2);
     opacity: 0;
-    transition: opacity 0.15s;
+    scale: 0.8;
+    transition:
+      opacity var(--t-quick) ease-out,
+      scale var(--t-quick) ease-out;
     display: grid;
     place-items: center;
   }
   .row:hover .actions button,
   .row:focus-within .actions button {
     opacity: 1;
+    scale: 1;
+    transition:
+      opacity var(--t-quick) ease-out,
+      scale var(--t-spring) var(--spring);
+  }
+  .row:not(.head):focus-visible {
+    background: rgb(255 255 255 / 0.1);
   }
   .actions button:hover {
     color: var(--text);
@@ -327,6 +361,23 @@
   }
   .eq i:nth-child(3) {
     animation-delay: -0.6s;
+  }
+  /* Moviment reduït o mode lleuger: barres quietes a alçades diferents. */
+  .still .eq i {
+    animation: none;
+    transform: scaleY(0.5);
+  }
+  .still .eq i:nth-child(2) {
+    transform: scaleY(1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .eq i {
+      animation: none;
+      transform: scaleY(0.5);
+    }
+    .eq i:nth-child(2) {
+      transform: scaleY(1);
+    }
   }
   @keyframes eq {
     0%,

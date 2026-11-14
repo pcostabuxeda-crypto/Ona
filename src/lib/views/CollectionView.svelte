@@ -4,7 +4,9 @@
   import { paletteFrom } from "$lib/color";
   import Card from "$lib/components/Card.svelte";
   import Cover from "$lib/components/Cover.svelte";
+  import Empty from "$lib/components/Empty.svelte";
   import Icon from "$lib/components/Icon.svelte";
+  import Skeleton from "$lib/components/Skeleton.svelte";
   import TrackList from "$lib/components/TrackList.svelte";
   import { player } from "$lib/player.svelte";
   import { TILES } from "$lib/tiles";
@@ -16,7 +18,8 @@
   let albums = $state<Collection[]>([]);
   let tint = $state("#535353");
 
-  $effect(() => {
+  function load() {
+    failed = false;
     A.loadCollection(kind, id)
       .then(async (d) => {
         data = d;
@@ -24,7 +27,8 @@
       })
       .catch(() => (failed = true));
     if (kind === "artist") A.artistAlbums(id).then((r) => (albums = r)).catch(() => {});
-  });
+  }
+  $effect(load);
 
   const totalMs = $derived(data?.tracks.reduce((s, t) => s + t.duration_ms, 0) ?? 0);
   const label = $derived(({ playlist: "Playlist", album: "Àlbum", liked: "Playlist", artist: "Artista verificat", audius: "Audius", local: "Al teu ordinador" } as const)[kind]);
@@ -50,7 +54,26 @@
 
 <section class="coll" style:--tint={tint}>
   {#if failed}
-    <p class="page muted">No s'ha pogut carregar.</p>
+    <Empty icon={kind === "artist" ? "artist" : "album"} title="No s'ha pogut carregar" action="Torna-ho a provar" onaction={load}>
+      Comprova la connexió i torna-ho a provar.
+    </Empty>
+  {:else if !data}
+    <div role="status" aria-busy="true" aria-label="Carregant">
+      <header class="head">
+        <span class="sk-cover"><Skeleton w="100%" h="100%" r="4px" round={kind === "artist"} /></span>
+        <div class="meta sk-meta">
+          <Skeleton w="80px" h="14px" />
+          <Skeleton w="min(420px, 70%)" h="48px" />
+          <Skeleton w="200px" h="14px" />
+        </div>
+      </header>
+      <div class="body">
+        <div class="actions"><Skeleton w="56px" h="56px" round /></div>
+        {#each { length: 8 }, i (i)}
+          <div class="sk-row"><Skeleton w="40px" h="40px" r="4px" /><span><Skeleton w="45%" h="14px" /><Skeleton w="25%" h="12px" /></span></div>
+        {/each}
+      </div>
+    </div>
   {:else if data}
     {#if kind === "artist"}
       <header class="banner" style:background-image={data.info.image ? `url(${data.info.image})` : null}>
@@ -65,7 +88,7 @@
         {#if TILES[kind]}
           <div class="liked" style:background={TILES[kind]?.bg}><Icon name={TILES[kind]?.icon ?? ""} size={80} /></div>
         {:else}
-          <Cover src={data.info.image} size={232} radius={4} />
+          <Cover src={data.info.image} size={232} radius={4} tilt />
         {/if}
         <div class="meta">
           <span class="label">{label}</span>
@@ -86,13 +109,19 @@
         <button class="act" class:on={player.shuffle} onclick={shuffleAll} title="Reprodueix en ordre aleatori"><Icon name="shuffle" size={32} /></button>
       </div>
 
-      {#if kind === "artist"}
+      {#if !data.tracks.length && !albums.length}
+        <Empty icon={kind === "local" ? "album" : "note"} title={kind === "local" ? "No hi ha música a la carpeta Música" : "Encara no hi ha cançons"}>
+          {#if kind === "liked"}Desa cançons amb el botó <Icon name="addCircle" size={14} /> de la barra de reproducció (Ctrl S).
+          {:else if kind === "local"}Copia fitxers d'àudio a la carpeta Música de Windows i torna a obrir aquesta vista.
+          {:else}Afegeix-n'hi des de Spotify i tornaran a sortir aquí.{/if}
+        </Empty>
+      {:else if kind === "artist"}
         <h2 class="sub">Populars</h2>
         <TrackList tracks={data.tracks.slice(0, 10)} context={ctx} showAlbum={false} header={false} />
         {#if albums.length}
           <div class="shelf-title"><h2>Discografia</h2></div>
           <div class="shelf">
-            {#each albums as a (a.id)}<Card item={a} />{/each}
+            {#each albums as a, i (a.id)}<Card item={a} index={i} />{/each}
           </div>
         {/if}
       {:else}
@@ -115,6 +144,28 @@
   }
   .head :global(.cover) {
     box-shadow: 0 4px 60px rgb(0 0 0 / 0.5);
+  }
+  .sk-cover {
+    width: 232px;
+    height: 232px;
+    flex: none;
+  }
+  .sk-meta {
+    flex: 1;
+    gap: 12px;
+  }
+  .sk-row {
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+  }
+  .sk-row span {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
   .liked {
     width: 232px;
@@ -190,11 +241,12 @@
   }
   .act {
     color: var(--text-2);
-    transition: transform 0.1s;
+    transition: scale var(--t-spring) var(--spring);
   }
-  .act:hover {
+  .act:hover,
+  .act:focus-visible {
     color: var(--text);
-    transform: scale(1.04);
+    scale: 1.08;
   }
   .act.on {
     color: var(--accent);
@@ -213,9 +265,13 @@
       padding: 32px 16px 16px;
     }
     .head :global(.cover),
-    .liked {
+    .liked,
+    .sk-cover {
       width: 160px !important;
       height: 160px !important;
+    }
+    .sk-row {
+      padding: 0 8px;
     }
     h1,
     h1.long {

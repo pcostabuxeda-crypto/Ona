@@ -4,12 +4,16 @@
    * d'arribada) i «Després, de: <context>». Es reordena arrossegant la nansa o amb Alt+↑/↓.
    */
   import { flip } from "svelte/animate";
+  import { backOut } from "svelte/easing";
   import { fly } from "svelte/transition";
   import type { Track } from "$lib/api";
   import { fmtTime } from "$lib/api";
   import { player } from "$lib/player.svelte";
+  import { calm } from "$lib/motion";
+  import { settings } from "$lib/settings.svelte";
   import { ui } from "$lib/ui.svelte";
   import Cover from "./Cover.svelte";
+  import Empty from "./Empty.svelte";
   import Icon from "./Icon.svelte";
 
   type ListId = "user" | "ctx";
@@ -25,6 +29,8 @@
     user: player.upNext.map((track) => ({ track, key: track })),
     ctx: player.upcoming.map((u) => ({ track: u.track, key: u.key })),
   });
+  /** Svelte no veu els tokens CSS: amb moviment reduït o mode lleuger, transicions a 0. */
+  const still = $derived(calm());
   const over = $derived(drag ? Math.max(0, Math.min(rows[drag.list].length - 1, drag.from + Math.round(drag.dy / H))) : -1);
 
   function shift(list: ListId, j: number) {
@@ -97,8 +103,9 @@
         class="row"
         class:lifted={drag?.list === id && drag.from === j}
         style:transform="translateY({shift(id, j)}px)"
-        animate:flip={{ duration: settling ? 0 : 300 }}
-        out:fly={{ x: 40, duration: 180 }}
+        animate:flip={{ duration: settling || still ? 0 : 420, easing: backOut }}
+        in:fly={{ x: 32, duration: still ? 0 : 520, easing: backOut }}
+        out:fly={{ x: 40, duration: still ? 0 : 180 }}
       >
         <span
           class="handle"
@@ -142,13 +149,15 @@
 
   {#if player.current}
     <span class="label">Ara sona</span>
-    <div class="item now">
-      <Cover src={player.current.album.thumb} size={48} radius={4} />
-      <span class="txt">
-        <b>{player.current.name}</b>
-        <small>{player.current.artists.map((a) => a.name).join(", ")}</small>
-      </span>
-    </div>
+    {#key player.current.id}
+      <div class="item now" class:still={settings.light}>
+        <Cover src={player.current.album.thumb} size={48} radius={4} />
+        <span class="txt">
+          <b>{player.current.name}</b>
+          <small>{player.current.artists.map((a) => a.name).join(", ")}</small>
+        </span>
+      </div>
+    {/key}
   {/if}
 
   {#if rows.user.length}
@@ -171,9 +180,9 @@
   {/if}
 
   {#if !rows.user.length && !rows.ctx.length}
-    <p class="empty">
-      No hi ha res més a la cua. Afegeix-hi cançons amb el botó <Icon name="queueAdd" size={14} /> d'una fila o amb Q.
-    </p>
+    <Empty icon="queue" title="No hi ha res més a la cua" small>
+      Afegeix-hi cançons amb el botó <Icon name="queueAdd" size={14} /> d'una fila, amb Q o amb el clic dret.
+    </Empty>
   {/if}
 </aside>
 
@@ -291,6 +300,16 @@
   }
   .now {
     padding: 6px 8px;
+    animation: now-in var(--t-spring) var(--spring) both;
+  }
+  .now.still {
+    animation: none;
+  }
+  @keyframes now-in {
+    from {
+      opacity: 0;
+      translate: 0 8px;
+    }
   }
   .now b {
     color: var(--accent);
@@ -331,25 +350,28 @@
     border-radius: 50%;
     color: var(--text-2);
     opacity: 0;
-    transition: opacity 0.15s;
+    scale: 0.8;
+    transition:
+      opacity var(--t-quick) ease-out,
+      scale var(--t-quick) ease-out;
   }
   .row:hover .remove,
   .remove:focus-visible,
   .row:focus-within .remove {
     opacity: 1;
+    scale: 1;
+    transition:
+      opacity var(--t-quick) ease-out,
+      scale var(--t-spring) var(--spring);
   }
   .remove:hover {
     color: var(--text);
     background: rgb(255 255 255 / 0.1);
   }
-  .more,
-  .empty {
+  .more {
     padding: 8px;
     color: var(--text-2);
     font-size: 13px;
     line-height: 1.5;
-  }
-  .empty :global(svg) {
-    vertical-align: -2px;
   }
 </style>

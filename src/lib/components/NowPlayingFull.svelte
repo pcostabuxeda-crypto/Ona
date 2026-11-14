@@ -13,10 +13,12 @@
   import Slider from "./Slider.svelte";
   import Disc from "./Disc.svelte";
   import Visualizer from "./Visualizer.svelte";
-  import { settings } from "$lib/settings.svelte";
+  import { settings, space } from "$lib/settings.svelte";
 
   // Estètica Ona: disc de vinil, ona a la barra i visualitzador a baix.
   const ona = $derived(settings.look === "ona");
+  // Mode espai: el fons Cosmos es veu a través (sense fons propi) i el disc és un planeta.
+  const cosmos = $derived(space());
 
   const win = getCurrentWindow();
   const t = $derived(player.current);
@@ -27,12 +29,12 @@
 
 <svelte:window bind:innerWidth={width} onkeydown={(e) => e.key === "Escape" && ui.back()} />
 
-<div class="fs" class:stacked>
+<div class="fs" class:stacked class:cosmos>
   {#if ona && settings.viz && !settings.light}
     <div class="viz"><Visualizer style="line" shape="wave" colorA={player.palette.a} colorB={player.palette.b} /></div>
   {/if}
   <main class="scroll">
-    <Lyrics inset={stacked ? "32px" : "52%"} dark />
+    <Lyrics inset={stacked ? "32px" : "52%"} dark space={cosmos} aura={ona && !settings.light} />
   </main>
 
   <header data-tauri-drag-region>
@@ -47,7 +49,7 @@
   {#if t}
     <aside class="side">
       {#if ona && settings.disc}
-        <Disc src={t.album.image} playing={player.playing} size={stacked ? "96px" : "min(28vw, 340px)"} />
+        <Disc src={t.album.image} playing={player.playing} size={stacked ? "96px" : "min(28vw, 340px)"} planet={cosmos && !stacked} />
       {:else}
         <Cover src={t.album.image} size={stacked ? 96 : "min(28vw, 340px)"} radius={ona ? 20 : 12} />
       {/if}
@@ -85,6 +87,23 @@
     inset: 0;
     z-index: 60;
     background: #0a0a0b;
+  }
+  /* Mode espai: el Cosmos de l'app es veu a través (la resta de l'app s'amaga a +page). */
+  .fs.cosmos {
+    background: transparent;
+    animation: arrive var(--t-spring) var(--spring-soft) backwards;
+  }
+  @keyframes arrive {
+    from {
+      opacity: 0;
+      scale: 0.94;
+    }
+  }
+  .stacked.cosmos .side {
+    background: linear-gradient(rgb(3 2 8 / 0.92) 80%, transparent);
+  }
+  .cosmos .side :global(.disc.planet) {
+    margin-bottom: 28px;
   }
   .viz {
     position: absolute;

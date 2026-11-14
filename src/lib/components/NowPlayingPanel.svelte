@@ -12,6 +12,8 @@
 
   // Estètica Ona: el disc gira al mig i el visualitzador fa un anell de llum al voltant.
   const ona = $derived(settings.look === "ona");
+  /** Estètica Ona sense mode lleuger: la portada sura, els títols arriben des del fons. */
+  const space = $derived(ona && !settings.light);
 
   let artist = $state<Collection | null>(null);
 
@@ -29,33 +31,38 @@
   const goArtist = (id: string) => id && ui.go({ name: "collection", kind: "artist", id });
 </script>
 
-<aside class="panel">
+<aside class="panel" class:space>
   <header>
     <span class="ctx">{player.context || t.album.name}</span>
-    <button class="x" onclick={() => (ui.panel = null)} title="Tanca"><Icon name="close" size={16} /></button>
+    <button class="x" onclick={() => (ui.panel = null)} title="Tanca" aria-label="Tanca el panell Ara sona"><Icon name="close" size={16} /></button>
   </header>
 
   <div class="scroll">
-    {#if ona && settings.disc}
-      <div class="orbit">
-        {#if settings.viz && !settings.light}
-          <div class="viz"><Visualizer style="circular" shape="bars" colorA={player.palette.a} colorB={player.palette.b} inner={0.36} /></div>
-        {/if}
-        <Disc src={t.album.image} playing={player.playing} size="72cqi" />
-      </div>
-    {:else}
-      <Cover src={t.album.image} size="100%" radius={ona ? 18 : 8} />
-    {/if}
-    <div class="title">
-      <div class="txt">
-        <h2>{t.name}</h2>
-        <span class="muted">
-          {#each t.artists as a, j (a.id + j)}
-            {#if j > 0},&nbsp;{/if}<a href="#artist" onclick={(e) => (e.preventDefault(), goArtist(a.id))}>{a.name}</a>
-          {/each}
-        </span>
-      </div>
+    <!-- Estètica Ona: la portada (o el disc) sura sobre una llum del color de la portada mentre sona. -->
+    <div class="float" class:floating={space && player.playing}>
+      {#if ona && settings.disc}
+        <div class="orbit">
+          {#if settings.viz && !settings.light}
+            <div class="viz"><Visualizer style="circular" shape="bars" colorA={player.palette.a} colorB={player.palette.b} inner={0.36} /></div>
+          {/if}
+          <Disc src={t.album.image} playing={player.playing} size="72cqi" />
+        </div>
+      {:else}
+        <Cover src={t.album.image} size="100%" radius={ona ? 18 : 8} tilt={ona} />
+      {/if}
     </div>
+    {#key t.id}
+      <div class="title">
+        <div class="txt">
+          <h2>{t.name}</h2>
+          <span class="muted">
+            {#each t.artists as a, j (a.id + j)}
+              {#if j > 0},&nbsp;{/if}<a href="#artist" onclick={(e) => (e.preventDefault(), goArtist(a.id))}>{a.name}</a>
+            {/each}
+          </span>
+        </div>
+      </div>
+    {/key}
 
     {#if artist}
       <button class="card artist" onclick={() => goArtist(artist!.id)}>
@@ -131,9 +138,74 @@
     flex-direction: column;
     gap: 16px;
   }
-  .scroll > :global(.cover) {
+  .float {
+    position: relative;
+    flex: none;
+  }
+  .float > :global(.cover) {
     aspect-ratio: 1;
     height: auto !important;
+  }
+
+  /* ---------- Estètica Ona: espai ---------- */
+  /* Llum del color de la portada sota la portada: degradat quiet (sense blur), només en surt l'opacitat. */
+  .space .float::before {
+    content: "";
+    position: absolute;
+    inset: 4% 8% -10%;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, color-mix(in oklab, var(--pb, var(--accent)) 70%, transparent), transparent);
+    opacity: 0.55;
+    pointer-events: none;
+    transition: opacity 1s ease-out;
+  }
+  .space .floating::before {
+    opacity: 0.9;
+  }
+  /* Sura només mentre sona (en pausa, quieta): una sola animació, d'un sol element. */
+  .floating > :global(*) {
+    animation: float 7s ease-in-out infinite;
+  }
+  @keyframes float {
+    50% {
+      translate: 0 -7px;
+    }
+  }
+  /* Títols que arriben des del fons en canviar de cançó. */
+  .space .title h2,
+  .space .title .muted {
+    animation: from-depth var(--t-spring) var(--spring) both;
+  }
+  .space .title .muted {
+    animation-delay: 70ms;
+  }
+  @keyframes from-depth {
+    from {
+      opacity: 0;
+      scale: 0.82;
+      translate: 0 -6px;
+    }
+  }
+  .space .title h2,
+  .space .title .muted {
+    transform-origin: left center;
+  }
+  /* Vidre fi: vora d'una línia i un fil de llum a dalt, sense backdrop-filter. */
+  :global(.ona) .card {
+    background: rgb(255 255 255 / 0.035);
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.09),
+      inset 0 1px 0 rgb(255 255 255 / 0.12);
+  }
+  :global(.ona) .next:hover {
+    background: rgb(255 255 255 / 0.06);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .floating > :global(*),
+    .space .title h2,
+    .space .title .muted {
+      animation: none;
+    }
   }
   .orbit {
     position: relative;

@@ -1,5 +1,6 @@
 <script lang="ts">
   /** Barra de dalt com la del client: enrere/endavant, inici, cercador, perfil i botons de finestra. */
+  import { tick } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import Icon from "./Icon.svelte";
   import { settings, setSetting } from "$lib/settings.svelte";
@@ -10,6 +11,12 @@
 
   function onSearchInput() {
     if (ui.view.name !== "search") ui.go({ name: "search" });
+  }
+  /** Finestra estreta: la lupa obre la vista de cerca, on el cercador torna a sortir sencer. */
+  async function openSearch() {
+    onSearchInput();
+    await tick();
+    document.querySelector<HTMLInputElement>("#search")?.focus();
   }
   function profileMenu(e: MouseEvent) {
     ui.openMenu(e, [
@@ -30,12 +37,15 @@
 <header class="bar" data-tauri-drag-region>
   {#if loggedIn}
     <div class="nav" data-tauri-drag-region>
-      <button class="arrow" disabled={ui.stack.length < 2} onclick={() => ui.back()} title="Enrere"><Icon name="back" size={16} /></button>
-      <button class="arrow" disabled={!ui.forward.length} onclick={() => ui.fwd()} title="Endavant"><Icon name="forward" size={16} /></button>
+      <button class="arrow" disabled={ui.stack.length < 2} onclick={() => ui.back()} title="Enrere (Alt ←)" aria-label="Enrere"><Icon name="back" size={16} /></button>
+      <button class="arrow" disabled={!ui.forward.length} onclick={() => ui.fwd()} title="Endavant (Alt →)" aria-label="Endavant"><Icon name="forward" size={16} /></button>
     </div>
-    <div class="center" data-tauri-drag-region>
-      <button class="home" class:on={ui.view.name === "home"} onclick={() => ui.go({ name: "home" })} title="Inici">
+    <div class="center" class:searching={ui.view.name === "search"} data-tauri-drag-region>
+      <button class="home" class:on={ui.view.name === "home"} onclick={() => ui.go({ name: "home" })} title="Inici" aria-label="Inici">
         <Icon name={ui.view.name === "home" ? "homeFilled" : "home"} size={24} />
+      </button>
+      <button class="home lens" onclick={openSearch} title="Cerca (Ctrl K)" aria-label="Cerca">
+        <Icon name="search" size={24} />
       </button>
       <label class="search">
         <Icon name="search" size={24} />
@@ -43,6 +53,7 @@
           id="search"
           type="search"
           placeholder="Què vols escoltar?"
+          aria-label="Cerca (Ctrl K)"
           bind:value={ui.query}
           oninput={onSearchInput}
           onfocus={onSearchInput}
@@ -51,14 +62,14 @@
         />
       </label>
     </div>
-    <button class="avatar" onclick={profileMenu} oncontextmenu={profileMenu} title={ui.user?.name ?? ""}>
+    <button class="avatar" onclick={profileMenu} oncontextmenu={profileMenu} title={ui.user?.name ?? ""} aria-label="Perfil i opcions" aria-haspopup="menu">
       {#if ui.user?.image}<img src={ui.user.image} alt="" />{:else}{(ui.user?.name ?? "?").slice(0, 1).toUpperCase()}{/if}
     </button>
   {/if}
   <div class="win">
-    <button onclick={() => win.minimize()} title="Minimitza"><Icon name="min" size={16} /></button>
-    <button onclick={() => win.toggleMaximize()} title="Maximitza"><Icon name="max" size={14} /></button>
-    <button class="close" onclick={() => win.close()} title="Tanca"><Icon name="close" size={16} /></button>
+    <button onclick={() => win.minimize()} title="Minimitza" aria-label="Minimitza"><Icon name="min" size={16} /></button>
+    <button onclick={() => win.toggleMaximize()} title="Maximitza" aria-label="Maximitza"><Icon name="max" size={14} /></button>
+    <button class="close" onclick={() => win.close()} title="Tanca" aria-label="Tanca"><Icon name="close" size={16} /></button>
   </div>
 </header>
 
@@ -173,7 +184,57 @@
   .win {
     display: flex;
     align-self: stretch;
-    margin-left: 8px;
+    /* Sempre a la dreta, també a l'arrencada i al login (quan no hi ha res més a la barra). */
+    margin-left: auto;
+  }
+  .lens {
+    display: none;
+  }
+
+  /* ---------- Finestra estreta ---------- */
+  /* ≤520 px: el cercador es plega en una lupa rodona (a la vista de cerca, torna a sortir sencer). */
+  @media (max-width: 520px) {
+    .bar {
+      gap: 6px;
+      padding-left: 10px;
+    }
+    .center {
+      gap: 6px;
+    }
+    .home,
+    .avatar {
+      width: 40px;
+      height: 40px;
+    }
+    .lens {
+      display: grid;
+    }
+    .center:not(.searching) .search {
+      display: none;
+    }
+    .searching .lens {
+      display: none;
+    }
+    .search {
+      flex: 1 1 auto;
+      height: 40px;
+      gap: 8px;
+      padding: 0 12px 0 10px;
+    }
+    .search :global(svg) {
+      width: 20px;
+      height: 20px;
+      flex: none;
+    }
+    .win button {
+      width: 40px;
+    }
+  }
+  /* ≤440 px: fora les fletxes (Alt ←/→ continuen funcionant). */
+  @media (max-width: 440px) {
+    .nav {
+      display: none;
+    }
   }
   .win button {
     width: 46px;
